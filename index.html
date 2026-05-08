@@ -5,183 +5,42 @@
 <meta charset="utf-8">
 <title>VR Camera Sync</title>
 
+<!-- A-FRAME -->
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+<!-- EXTRAS -->
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
-<!-- Firebase -->
+<!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
-<script>
-
-AFRAME.registerComponent('organic-distortion', {
-
-  init() {
-
-    this.el.addEventListener('model-loaded', () => {
-
-      const mesh = this.el.getObject3D('mesh');
-
-      if (!mesh) return;
-
-      mesh.traverse((node) => {
-
-        if (node.isMesh) {
-
-          const geometry = node.geometry;
-          const position = geometry.attributes.position;
-
-          const originalPositions = [];
-
-          for (let i = 0; i < position.count; i++) {
-
-            originalPositions.push({
-
-              x: position.getX(i),
-              y: position.getY(i),
-              z: position.getZ(i)
-
-            });
-
-          }
-
-          node.userData.originalPositions =
-            originalPositions;
-
-        }
-
-      });
-
-    });
-
-  },
-
-  tick(time) {
-
-    const mesh = this.el.getObject3D('mesh');
-
-    if (!mesh) return;
-
-    const t = time * 0.001;
-
-    mesh.traverse((node) => {
-
-      if (node.isMesh) {
-
-        const position =
-          node.geometry.attributes.position;
-
-        const original =
-          node.userData.originalPositions;
-
-        if (!original) return;
-
-        for (let i = 0; i < position.count; i++) {
-
-          const ox = original[i].x;
-          const oy = original[i].y;
-          const oz = original[i].z;
-
-          // ОСНОВНАЯ ВОЛНА
-
-          const wave1 =
-
-            Math.sin(
-              t * 2.0 +
-              ox * 3.0 +
-              oy * 2.0
-            ) * 0.06;
-
-          // ВТОРАЯ ВОЛНА
-
-          const wave2 =
-
-            Math.cos(
-              t * 1.5 +
-              oy * 6.0 +
-              oz * 2.0
-            ) * 0.04;
-
-          // МЕЛКАЯ ТРЯСКА / ШУМ
-
-          const noise =
-
-            Math.sin(
-              t * 5.0 +
-              ox * 15.0 +
-              oy * 12.0
-            ) * 0.01;
-
-          // ПУЛЬСАЦИЯ
-
-          const pulse =
-
-            Math.sin(
-              t * 0.8
-            ) * 0.03;
-
-          // ИТОГ
-
-          const distortion =
-            wave1 +
-            wave2 +
-            noise +
-            pulse;
-
-          // ДВИЖЕНИЕ В РАЗНЫХ НАПРАВЛЕНИЯХ
-
-          position.setXYZ(
-
-            i,
-
-            ox + distortion * 0.3,
-
-            oy + distortion * 0.15,
-
-            oz + distortion
-
-          );
-
-        }
-
-        position.needsUpdate = true;
-
-      }
-
-    });
-
-  }
-
-});
-
-</script>
-    
 <style>
+
 body {
     margin: 0;
     overflow: hidden;
 }
+
 </style>
-
-</head>
-
-<body>
 
 <script>
 
-// ======================================
-// FIREBASE CONFIG
-// ======================================
+// =====================================================
+// FIREBASE
+// =====================================================
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCDxYWfc8VOD5DFLq-JA8C0svyKY3L_-Q8",
-  authDomain: "simbioze-d7472.firebaseapp.com",
-  databaseURL: "https://simbioze-d7472-default-rtdb.firebaseio.com/",
-  projectId: "simbioze-d7472",
-  storageBucket: "simbioze-d7472.firebasestorage.app",
-  messagingSenderId: "131554241238",
-  appId: "1:131554241238:web:7c02e6e03b1d72e0d23777",
-  measurementId: "G-JNE6LP2H9E"
+
+    apiKey: "AIzaSyCDxYWfc8VOD5DFLq-JA8C0svyKY3L_-Q8",
+    authDomain: "simbioze-d7472.firebaseapp.com",
+    databaseURL: "https://simbioze-d7472-default-rtdb.firebaseio.com/",
+    projectId: "simbioze-d7472",
+    storageBucket: "simbioze-d7472.firebasestorage.app",
+    messagingSenderId: "131554241238",
+    appId: "1:131554241238:web:7c02e6e03b1d72e0d23777",
+    measurementId: "G-JNE6LP2H9E"
+
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -189,20 +48,160 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
 
-// ======================================
-// URL MODE
-// ?mode=vr
-// ?mode=view
-// ======================================
+// =====================================================
+// ORGANIC DISTORTION
+// =====================================================
 
-const params = new URLSearchParams(window.location.search);
+AFRAME.registerComponent('organic-distortion', {
 
-const mode = params.get("mode");
+    init() {
+
+        this.el.addEventListener('model-loaded', () => {
+
+            const mesh = this.el.getObject3D('mesh');
+
+            if (!mesh) return;
+
+            mesh.traverse((node) => {
+
+                // IMPORTANT:
+                // ignore skinned meshes
+
+                if (node.isMesh && !node.isSkinnedMesh) {
+
+                    const geometry = node.geometry;
+                    const position = geometry.attributes.position;
+
+                    const originalPositions = [];
+
+                    for (let i = 0; i < position.count; i++) {
+
+                        originalPositions.push({
+
+                            x: position.getX(i),
+                            y: position.getY(i),
+                            z: position.getZ(i)
+
+                        });
+
+                    }
+
+                    node.userData.originalPositions =
+                        originalPositions;
+
+                }
+
+            });
+
+        });
+
+    },
+
+    tick(time) {
+
+        const mesh = this.el.getObject3D('mesh');
+
+        if (!mesh) return;
+
+        const t = time * 0.001;
+
+        mesh.traverse((node) => {
+
+            // IMPORTANT:
+            // ignore skinned meshes
+
+            if (node.isMesh && !node.isSkinnedMesh) {
+
+                const position =
+                    node.geometry.attributes.position;
+
+                const original =
+                    node.userData.originalPositions;
+
+                if (!original) return;
+
+                for (let i = 0; i < position.count; i++) {
+
+                    const ox = original[i].x;
+                    const oy = original[i].y;
+                    const oz = original[i].z;
+
+                    // WAVE 1
+
+                    const wave1 =
+
+                        Math.sin(
+                            t * 2.0 +
+                            ox * 3.0 +
+                            oy * 2.0
+                        ) * 0.06;
+
+                    // WAVE 2
+
+                    const wave2 =
+
+                        Math.cos(
+                            t * 1.5 +
+                            oy * 6.0 +
+                            oz * 2.0
+                        ) * 0.04;
+
+                    // NOISE
+
+                    const noise =
+
+                        Math.sin(
+                            t * 5.0 +
+                            ox * 15.0 +
+                            oy * 12.0
+                        ) * 0.01;
+
+                    // PULSE
+
+                    const pulse =
+
+                        Math.sin(
+                            t * 0.8
+                        ) * 0.03;
+
+                    // FINAL DISTORTION
+
+                    const distortion =
+                        wave1 +
+                        wave2 +
+                        noise +
+                        pulse;
+
+                    // APPLY
+
+                    position.setXYZ(
+
+                        i,
+
+                        ox + distortion * 0.3,
+
+                        oy + distortion * 0.15,
+
+                        oz + distortion
+
+                    );
+
+                }
+
+                position.needsUpdate = true;
+
+            }
+
+        });
+
+    }
+
+});
 
 
-// ======================================
+// =====================================================
 // CAMERA SENDER
-// ======================================
+// =====================================================
 
 AFRAME.registerComponent('camera-sync', {
 
@@ -228,9 +227,9 @@ AFRAME.registerComponent('camera-sync', {
 });
 
 
-// ======================================
+// =====================================================
 // CAMERA VIEWER
-// ======================================
+// =====================================================
 
 AFRAME.registerComponent('camera-viewer', {
 
@@ -264,17 +263,23 @@ AFRAME.registerComponent('camera-viewer', {
 
 </script>
 
+</head>
 
-<a-scene background="color: #ffffff"
+<body>
+
+<a-scene
+
+background="color: #ffffff"
+
 inspector
 keyboard-shortcuts
 screenshot
 xr-mode-ui
 device-orientation-permission-ui>
 
-<!-- ======================================
+<!-- =====================================================
 ASSETS
-====================================== -->
+===================================================== -->
 
 <a-assets>
 
@@ -286,79 +291,98 @@ ASSETS
 </a-assets>
 
 
-<!-- ======================================
+<!-- =====================================================
+CAMERA
+===================================================== -->
+
+<a-entity
+    id="mainCamera"
+    camera
+    position="0 1.6 5">
+</a-entity>
+
+
+<!-- =====================================================
+LIGHTS
+===================================================== -->
+
+<a-entity
+light="type: ambient; intensity: 0.46; color: #ffffff"
+position="0 0.016 0">
+</a-entity>
+
+<a-entity
+light="intensity: 0.94; color: #7b81db"
+position="0 2 0">
+</a-entity>
+
+<a-entity
+light="type: point;
+       color: #796d7e;
+       intensity: 5.03;
+       distance: 1.24;
+       decay: 1"
+position="-0.05479 4.37636 -1.47918">
+</a-entity>
+
+
+<!-- =====================================================
 MODEL
-====================================== -->
+===================================================== -->
 
 <a-entity
     gltf-model="#sceneModel"
     position="1.20087 0 -2.79553"
     animation-mixer
     organic-distortion>
-
 </a-entity>
 
-
-<!-- ======================================
-LIGHTS
-====================================== -->
-
-<a-entity light="type: ambient; intensity: 0.46; color: #ffffff" visible="" position="0 0.016 0">
-    
-</a-entity>
-    <a-entity light="intensity: 0.94; color: #7b81db" position="0 2 0" visible="">
-        
-    </a-entity> 
-    <a-entity light="type: point; color: #796d7e; intensity: 5.03; distance: 1.24; decay: -0.64" position="-0.05479 4.37636 -1.47918" visible="">
-        
-    </a-entity>
+</a-scene>
 
 
-<!-- ======================================
-CAMERAS
-====================================== -->
+<!-- =====================================================
+MODE SETUP
+===================================================== -->
 
 <script>
 
-if (mode === "vr") {
+window.addEventListener("DOMContentLoaded", () => {
 
-    document.write(`
+    const params = new URLSearchParams(window.location.search);
 
-        <a-entity id="rig">
+    const mode = params.get("mode");
 
-            <a-entity
-                id="mainCamera"
-                camera
-                position="0 1.6 0"
-                look-controls
-                wasd-controls
-                camera-sync>
-            </a-entity>
+    const cam = document.querySelector("#mainCamera");
 
-        </a-entity>
+    // ==========================================
+    // VR USER
+    // ==========================================
 
-    `);
+    if (mode === "vr") {
 
-}
+        cam.setAttribute("look-controls", "");
+        cam.setAttribute("wasd-controls", "");
+        cam.setAttribute("camera-sync", "");
 
-else {
+        console.log("VR MODE");
 
-    document.write(`
+    }
 
-        <a-entity
-            id="viewerCamera"
-            camera
-            position="0 1.6 0"
-            camera-viewer>
-        </a-entity>
+    // ==========================================
+    // VIEWER
+    // ==========================================
 
-    `);
+    else {
 
-}
+        cam.setAttribute("camera-viewer", "");
+
+        console.log("VIEW MODE");
+
+    }
+
+});
 
 </script>
-
-</a-scene>
 
 </body>
 </html>
