@@ -1,10 +1,15 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 <meta charset="utf-8">
 <title>VR Camera Sync</title>
 
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
 <style>
 body {
@@ -19,9 +24,39 @@ body {
 
 <script>
 
-// ===============================
+// ======================================
+// FIREBASE CONFIG
+// ======================================
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCDxYWfc8VOD5DFLq-JA8C0svyKY3L_-Q8",
+  authDomain: "simbioze-d7472.firebaseapp.com",
+  projectId: "simbioze-d7472",
+  storageBucket: "simbioze-d7472.firebasestorage.app",
+  messagingSenderId: "131554241238",
+  appId: "1:131554241238:web:7c02e6e03b1d72e0d23777",
+  measurementId: "G-JNE6LP2H9E"
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+
+// ======================================
+// URL MODE
+// ?mode=vr
+// ?mode=view
+// ======================================
+
+const params = new URLSearchParams(window.location.search);
+
+const mode = params.get("mode");
+
+
+// ======================================
 // CAMERA SENDER
-// ===============================
+// ======================================
 
 AFRAME.registerComponent('camera-sync', {
 
@@ -30,46 +65,52 @@ AFRAME.registerComponent('camera-sync', {
         const pos = this.el.object3D.position;
         const rot = this.el.object3D.rotation;
 
-        localStorage.setItem('camPos', JSON.stringify({
-            x: pos.x,
-            y: pos.y,
-            z: pos.z
-        }));
+        db.ref("camera").set({
 
-        localStorage.setItem('camRot', JSON.stringify({
-            x: rot.x,
-            y: rot.y,
-            z: rot.z
-        }));
+            px: pos.x,
+            py: pos.y,
+            pz: pos.z,
+
+            rx: rot.x,
+            ry: rot.y,
+            rz: rot.z
+
+        });
 
     }
 
 });
 
-// ===============================
+
+// ======================================
 // CAMERA VIEWER
-// ===============================
+// ======================================
 
 AFRAME.registerComponent('camera-viewer', {
 
-    tick: function () {
+    init: function () {
 
-        const pos = JSON.parse(localStorage.getItem('camPos'));
-        const rot = JSON.parse(localStorage.getItem('camRot'));
+        const el = this.el;
 
-        if (!pos || !rot) return;
+        db.ref("camera").on("value", (snapshot) => {
 
-        this.el.object3D.position.set(
-            pos.x,
-            pos.y,
-            pos.z
-        );
+            const data = snapshot.val();
 
-        this.el.object3D.rotation.set(
-            rot.x,
-            rot.y,
-            rot.z
-        );
+            if (!data) return;
+
+            el.object3D.position.set(
+                data.px,
+                data.py,
+                data.pz
+            );
+
+            el.object3D.rotation.set(
+                data.rx,
+                data.ry,
+                data.rz
+            );
+
+        });
 
     }
 
@@ -77,24 +118,26 @@ AFRAME.registerComponent('camera-viewer', {
 
 </script>
 
+
 <a-scene background="color: #ffffff">
 
-<!-- ===============================
+<!-- ======================================
 ASSETS
-=============================== -->
+====================================== -->
 
 <a-assets>
 
-    <a-asset-item
-        id="sceneModel"
-        src="https://popova-veronika.github.io/DIPLOM_TEST.glb">
-    </a-asset-item>
+<a-asset-item
+    id="sceneModel"
+    src="https://popova-veronika.github.io/DIPLOM_TEST.glb">
+</a-asset-item>
 
 </a-assets>
 
-<!-- ===============================
-WORLD
-=============================== -->
+
+<!-- ======================================
+MODEL
+====================================== -->
 
 <a-entity
     gltf-model="#sceneModel"
@@ -102,61 +145,64 @@ WORLD
     animation-mixer>
 </a-entity>
 
-<!-- ===============================
+
+<!-- ======================================
 LIGHTS
-=============================== -->
+====================================== -->
 
 <a-entity
-    light="type: ambient; intensity: 0.46; color: #ffffff">
+light="type: ambient; intensity: 0.46; color: #ffffff">
 </a-entity>
 
 <a-entity
-    light="type: point; color: #767aea; intensity: 2; distance: 6.47"
-    position="-14.70362 5.05623 -23.46842">
+light="intensity: 0.94; color: #7b81db"
+position="0 2 0">
 </a-entity>
 
 <a-entity
-    light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61"
-    position="-16.30642 3.94849 -11.62215">
+light="type: point; color: #767aea; intensity: 2; distance: 6.47; decay: 0.07"
+position="-14.70362 5.05623 -23.46842">
 </a-entity>
 
 <a-entity
-    light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67"
-    position="-13.6727 2.60813 -0.2093">
+light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61; decay: 0.22"
+position="-16.30642 3.94849 -11.62215">
 </a-entity>
 
 <a-entity
-    light="type: point; color: #4f7dff; intensity: 2"
-    position="2.62043 1.10844 -20.78345">
+light="type: point; color: #569ebd; intensity: 1.63; distance: 6; decay: 0.51"
+position="-16.52538 0.89144 14.66459">
 </a-entity>
 
-<!-- ===============================
-MODE SWITCH
-=============================== -->
+<a-entity
+light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67; decay: 2"
+position="-13.6727 2.60813 -0.2093">
+</a-entity>
+
+<a-entity
+light="type: point; color: #4f7dff; intensity: 2; distance: 6; decay: 2"
+position="2.62043 1.10844 -20.78345">
+</a-entity>
+
+
+<!-- ======================================
+CAMERAS
+====================================== -->
 
 <script>
-
-const params = new URLSearchParams(window.location.search);
-
-const mode = params.get("mode");
-
-// ===============================
-// VR USER
-// ===============================
 
 if (mode === "vr") {
 
     document.write(`
 
-        <a-entity
-            id="cameraRig">
+        <a-entity id="rig">
 
             <a-entity
                 id="mainCamera"
                 camera
+                position="0 1.6 0"
                 look-controls
                 wasd-controls
-                position="0 1.6 0"
                 camera-sync>
             </a-entity>
 
@@ -165,10 +211,6 @@ if (mode === "vr") {
     `);
 
 }
-
-// ===============================
-// VIEWER
-// ===============================
 
 else {
 
