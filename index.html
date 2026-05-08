@@ -2,43 +2,162 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>A-Frame</title>
+<title>A-Frame Multiplayer VR</title>
 
+<!-- A-Frame -->
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+<!-- Extras -->
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+<!-- Multiplayer -->
+<script src="https://unpkg.com/networked-aframe/dist/networked-aframe.min.js"></script>
 
 </head>
 
 <body>
 
-<a-scene background="color: #fff" inspector="" keyboard-shortcuts="" screenshot="" xr-mode-ui="" device-orientation-permission-ui="">
+<a-scene
+networked-scene="
+    room: diplomaRoom;
+    debug: true;
+"
+background="color: #fff">
+
+<!-- ================= ASSETS ================= -->
 
 <a-assets>
-<a-asset-item id="sceneModel" src="https://popova-veronika.github.io/DIPLOM_TEST.glb"></a-asset-item>
+
+    <!-- Your model -->
+    <a-asset-item
+        id="sceneModel"
+        src="https://popova-veronika.github.io/DIPLOM_TEST.glb">
+    </a-asset-item>
+
+    <!-- Avatar template -->
+    <template id="avatar-template">
+
+        <a-entity>
+
+            <!-- Head -->
+            <a-sphere
+                color="#ff00ff"
+                radius="0.15"
+                position="0 1.6 0">
+            </a-sphere>
+
+        </a-entity>
+
+    </template>
+
 </a-assets>
 
-<a-entity camera="" look-controls="" position="0 1.42046 -1.43705" rotation="-6.531718864491387 372.0787921579559 0" data-aframe-inspector-original-camera="" visible=""></a-entity>
+<!-- ================= PLAYER ================= -->
 
-<a-entity light="type: ambient; intensity: 0.46; color: #ffffff" visible="" position="0 0.016 0"></a-entity>
-<a-entity light="intensity: 0.94; color: #7b81db" position="0 2 0" visible=""></a-entity>
+<a-entity
+    id="player"
+    networked="template:#avatar-template;attachTemplateToLocal:false;">
 
-<a-entity gltf-model="https://popova-veronika.github.io/DIPLOM_TEST.glb" position="1.20087 0 -2.79553" animation-mixer="">
+    <a-entity
+        camera
+        position="0 1.6 0"
+        look-controls
+        wasd-controls>
+    </a-entity>
+
+</a-entity>
+
+<!-- ================= MODEL ================= -->
+
+<a-entity
+    id="world"
+    gltf-model="#sceneModel"
+    position="1.20087 0 -2.79553"
+    animation-mixer>
+</a-entity>
+
+<!-- ================= LIGHTS ================= -->
+
+<!-- ambient -->
+<a-entity
+    light="type: ambient; intensity: 0.46; color: #ffffff">
+</a-entity>
+
+<!-- top -->
+<a-entity
+    light="intensity: 0.94; color: #7b81db"
+    position="0 2 0">
 </a-entity>
 
 <!-- pink -->
-<a-entity light="type: point; color: #767aea; intensity: 2; distance: 6.47; decay: 0.07" position="-14.70362 5.05623 -23.46842" visible=""></a-entity>
-<a-entity light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61; decay: 0.22; groundColor: #99adff" position="-16.30642 3.94849 -11.62215"></a-entity>
-<a-entity light="type: point; color: #569ebd; intensity: 1.63; distance: 6; decay: 0.51" position="-16.52538 0.89144 14.66459" visible=""></a-entity>
-<a-entity light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67; decay: 2" position="-13.6727 2.60813 -0.2093"></a-entity>
+<a-entity
+    light="type: point; color: #767aea; intensity: 2; distance: 6.47; decay: 0.07"
+    position="-14.70362 5.05623 -23.46842">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61; decay: 0.22"
+    position="-16.30642 3.94849 -11.62215">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #569ebd; intensity: 1.63; distance: 6; decay: 0.51"
+    position="-16.52538 0.89144 14.66459">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67; decay: 2"
+    position="-13.6727 2.60813 -0.2093">
+</a-entity>
 
 <!-- blue -->
-<a-entity light="type: point; color: #4f7dff; intensity: 2; distance: 6; decay: 2" position="2.62043 1.10844 -20.78345"></a-entity>
-<a-entity light="type: point; color: #4f7dff; intensity: 2.68; distance: 7.59; decay: 2; angle: 91.63" position="5.03776 0.02665 17.18237" rotation=""></a-entity>
-<a-entity light="type: point; color: #796d7e; intensity: 5.03; distance: 1.24; decay: -0.64" position="-0.05479 4.37636 -1.47918" visible=""></a-entity>
-<a-entity light="type: point; color: #b04098; intensity: 2; distance: 7.84; decay: 2" position="-13.14731 2.62806 -15.5344"></a-entity><a-entity light="type: point; color: #d84dff; intensity: 2; distance: 7.84; decay: 2" position="8.33503 4.86104 -13.57466"></a-entity><a-entity light="type: point; color: #3fcfb2; intensity: 2; distance: 7.84; decay: 2" position="21.32743 0.96495 -14.12539" rotation=""></a-entity>
-  <a-entity light="type: point; color: #4f7dff; intensity: 2.3; distance: 5.31; decay: 1.83" position="-2.79022 3.30568 10.14914"></a-entity>
+<a-entity
+    light="type: point; color: #4f7dff; intensity: 2; distance: 6; decay: 2"
+    position="2.62043 1.10844 -20.78345">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #4f7dff; intensity: 2.68; distance: 7.59; decay: 2"
+    position="5.03776 0.02665 17.18237">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #796d7e; intensity: 5.03; distance: 1.24; decay: 0.64"
+    position="-0.05479 4.37636 -1.47918">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #b04098; intensity: 2; distance: 7.84; decay: 2"
+    position="-13.14731 2.62806 -15.5344">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #d84dff; intensity: 2; distance: 7.84; decay: 2"
+    position="8.33503 4.86104 -13.57466">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #3fcfb2; intensity: 2; distance: 7.84; decay: 2"
+    position="21.32743 0.96495 -14.12539">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #4f7dff; intensity: 2.3; distance: 5.31; decay: 1.83"
+    position="-2.79022 3.30568 10.14914">
+</a-entity>
 
 <!-- violet -->
-<a-entity light="type: point; color: #9f4173; intensity: 3.45; distance: 5; decay: 2" position="14.43973 2.64175 -6.06483"></a-entity><a-entity light="type: point; color: #9f414f; intensity: 3.45; distance: 5; decay: 1.53" position="20.12819 1.883 2.3437"></a-entity>
+<a-entity
+    light="type: point; color: #9f4173; intensity: 3.45; distance: 5; decay: 2"
+    position="14.43973 2.64175 -6.06483">
+</a-entity>
 
-<div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div></a-scene>
+<a-entity
+    light="type: point; color: #9f414f; intensity: 3.45; distance: 5; decay: 1.53"
+    position="20.12819 1.883 2.3437">
+</a-entity>
+
+</a-scene>
+
+</body>
+</html>
