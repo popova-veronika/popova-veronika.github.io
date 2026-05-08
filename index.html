@@ -47,6 +47,11 @@ firebase.initializeApp(firebaseConfig);
 
 const db = firebase.database();
 
+window.addEventListener("beforeunload", () => {
+
+    db.ref("camera").remove();
+
+});
 
 // =====================================================
 // ORGANIC DISTORTION
@@ -205,8 +210,16 @@ AFRAME.registerComponent('organic-distortion', {
 
 AFRAME.registerComponent('camera-sync', {
 
-    tick: function () {
-
+    tick: function (time) {
+    
+        if (!this.lastUpdate) {
+            this.lastUpdate = 0;
+        }
+    
+        if (time - this.lastUpdate < 50) return;
+    
+        this.lastUpdate = time;
+        
         const pos = this.el.object3D.position;
         const rot = this.el.object3D.rotation;
 
