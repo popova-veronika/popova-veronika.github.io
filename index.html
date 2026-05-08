@@ -115,7 +115,7 @@ AFRAME.registerComponent('organic-distortion', {
             // IMPORTANT:
             // ignore skinned meshes
 
-            if (node.isMesh && !node.isSkinnedMesh) {
+            if (node.isMesh) {
 
                 const position =
                     node.geometry.attributes.position;
@@ -194,12 +194,7 @@ AFRAME.registerComponent('organic-distortion', {
                 }
 
                 position.needsUpdate = true;
-                
-                if (Math.floor(t * 20) % 2 === 0) {
-                
-                    node.geometry.computeVertexNormals();
-                
-                }
+                node.geometry.computeVertexNormals();
             }
 
         });
