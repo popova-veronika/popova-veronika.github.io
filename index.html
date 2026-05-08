@@ -6,11 +6,156 @@
 <title>VR Camera Sync</title>
 
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
 <!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
+<script>
+
+AFRAME.registerComponent('organic-distortion', {
+
+  init() {
+
+    this.el.addEventListener('model-loaded', () => {
+
+      const mesh = this.el.getObject3D('mesh');
+
+      if (!mesh) return;
+
+      mesh.traverse((node) => {
+
+        if (node.isMesh) {
+
+          const geometry = node.geometry;
+          const position = geometry.attributes.position;
+
+          const originalPositions = [];
+
+          for (let i = 0; i < position.count; i++) {
+
+            originalPositions.push({
+
+              x: position.getX(i),
+              y: position.getY(i),
+              z: position.getZ(i)
+
+            });
+
+          }
+
+          node.userData.originalPositions =
+            originalPositions;
+
+        }
+
+      });
+
+    });
+
+  },
+
+  tick(time) {
+
+    const mesh = this.el.getObject3D('mesh');
+
+    if (!mesh) return;
+
+    const t = time * 0.001;
+
+    mesh.traverse((node) => {
+
+      if (node.isMesh) {
+
+        const position =
+          node.geometry.attributes.position;
+
+        const original =
+          node.userData.originalPositions;
+
+        if (!original) return;
+
+        for (let i = 0; i < position.count; i++) {
+
+          const ox = original[i].x;
+          const oy = original[i].y;
+          const oz = original[i].z;
+
+          // ОСНОВНАЯ ВОЛНА
+
+          const wave1 =
+
+            Math.sin(
+              t * 2.0 +
+              ox * 3.0 +
+              oy * 2.0
+            ) * 0.06;
+
+          // ВТОРАЯ ВОЛНА
+
+          const wave2 =
+
+            Math.cos(
+              t * 1.5 +
+              oy * 6.0 +
+              oz * 2.0
+            ) * 0.04;
+
+          // МЕЛКАЯ ТРЯСКА / ШУМ
+
+          const noise =
+
+            Math.sin(
+              t * 5.0 +
+              ox * 15.0 +
+              oy * 12.0
+            ) * 0.01;
+
+          // ПУЛЬСАЦИЯ
+
+          const pulse =
+
+            Math.sin(
+              t * 0.8
+            ) * 0.03;
+
+          // ИТОГ
+
+          const distortion =
+            wave1 +
+            wave2 +
+            noise +
+            pulse;
+
+          // ДВИЖЕНИЕ В РАЗНЫХ НАПРАВЛЕНИЯХ
+
+          position.setXYZ(
+
+            i,
+
+            ox + distortion * 0.3,
+
+            oy + distortion * 0.15,
+
+            oz + distortion
+
+          );
+
+        }
+
+        position.needsUpdate = true;
+
+      }
+
+    });
+
+  }
+
+});
+
+</script>
+    
 <style>
 body {
     margin: 0;
@@ -120,7 +265,12 @@ AFRAME.registerComponent('camera-viewer', {
 </script>
 
 
-<a-scene background="color: #ffffff">
+<a-scene background="color: #ffffff"
+inspector
+keyboard-shortcuts
+screenshot
+xr-mode-ui
+device-orientation-permission-ui>
 
 <!-- ======================================
 ASSETS
@@ -143,7 +293,9 @@ MODEL
 <a-entity
     gltf-model="#sceneModel"
     position="1.20087 0 -2.79553"
-    animation-mixer>
+    animation-mixer
+    organic-distortion>
+
 </a-entity>
 
 
@@ -151,39 +303,15 @@ MODEL
 LIGHTS
 ====================================== -->
 
-<a-entity
-light="type: ambient; intensity: 0.46; color: #ffffff">
+<a-entity light="type: ambient; intensity: 0.46; color: #ffffff" visible="" position="0 0.016 0">
+    
 </a-entity>
-
-<a-entity
-light="intensity: 0.94; color: #7b81db"
-position="0 2 0">
-</a-entity>
-
-<a-entity
-light="type: point; color: #767aea; intensity: 2; distance: 6.47; decay: 0.07"
-position="-14.70362 5.05623 -23.46842">
-</a-entity>
-
-<a-entity
-light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61; decay: 0.22"
-position="-16.30642 3.94849 -11.62215">
-</a-entity>
-
-<a-entity
-light="type: point; color: #569ebd; intensity: 1.63; distance: 6; decay: 0.51"
-position="-16.52538 0.89144 14.66459">
-</a-entity>
-
-<a-entity
-light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67; decay: 2"
-position="-13.6727 2.60813 -0.2093">
-</a-entity>
-
-<a-entity
-light="type: point; color: #4f7dff; intensity: 2; distance: 6; decay: 2"
-position="2.62043 1.10844 -20.78345">
-</a-entity>
+    <a-entity light="intensity: 0.94; color: #7b81db" position="0 2 0" visible="">
+        
+    </a-entity> 
+    <a-entity light="type: point; color: #796d7e; intensity: 5.03; distance: 1.24; decay: -0.64" position="-0.05479 4.37636 -1.47918" visible="">
+        
+    </a-entity>
 
 
 <!-- ======================================
