@@ -53,7 +53,6 @@ window.addEventListener("beforeunload", () => {
 
 });
 
-
 // =====================================================
 // ORGANIC DISTORTION
 // =====================================================
@@ -70,13 +69,10 @@ AFRAME.registerComponent('organic-distortion', {
 
             mesh.traverse((node) => {
 
+                // IMPORTANT:
+                // ignore skinned meshes
+
                 if (node.isMesh && !node.isSkinnedMesh) {
-
-                    // IMPORTANT:
-                    // clone geometry first
-                    // prevents shared-buffer corruption
-
-                    node.geometry = node.geometry.clone();
 
                     const geometry = node.geometry;
                     const position = geometry.attributes.position;
@@ -115,6 +111,9 @@ AFRAME.registerComponent('organic-distortion', {
         const t = time * 0.001;
 
         mesh.traverse((node) => {
+
+            // IMPORTANT:
+            // ignore skinned meshes
 
             if (node.isMesh) {
 
@@ -195,12 +194,7 @@ AFRAME.registerComponent('organic-distortion', {
                 }
 
                 position.needsUpdate = true;
-
-                // IMPORTANT:
-                // update normals for lighting
-
                 node.geometry.computeVertexNormals();
-
             }
 
         });
@@ -217,19 +211,15 @@ AFRAME.registerComponent('organic-distortion', {
 AFRAME.registerComponent('camera-sync', {
 
     tick: function (time) {
-
+    
         if (!this.lastUpdate) {
-
             this.lastUpdate = 0;
-
         }
-
-        // 20fps sync instead of every frame
-
+    
         if (time - this.lastUpdate < 50) return;
-
+    
         this.lastUpdate = time;
-
+        
         const pos = this.el.object3D.position;
         const rot = this.el.object3D.rotation;
 
@@ -329,31 +319,21 @@ CAMERA
 LIGHTS
 ===================================================== -->
 
-<!-- ambient -->
-
 <a-entity
-light="type: ambient;
-       intensity: 0.46;
-       color: #ffffff"
+light="type: ambient; intensity: 0.46; color: #ffffff"
 position="0 0.016 0">
 </a-entity>
 
-<!-- directional -->
-
 <a-entity
-light="type: directional;
-       intensity: 0.94;
-       color: #7b81db"
+light="intensity: 0.94; color: #7b81db"
 position="0 2 0">
 </a-entity>
-
-<!-- point -->
 
 <a-entity
 light="type: point;
        color: #796d7e;
        intensity: 5.03;
-       distance: 10;
+       distance: 1.24;
        decay: 1"
 position="-0.05479 4.37636 -1.47918">
 </a-entity>
