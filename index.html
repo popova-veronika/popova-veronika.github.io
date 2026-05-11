@@ -1,44 +1,401 @@
 <!DOCTYPE html>
 <html>
+
 <head>
 <meta charset="utf-8">
-<title>A-Frame</title>
+<title>VR Camera Sync</title>
 
+<!-- A-FRAME -->
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+<!-- EXTRAS -->
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+<!-- FIREBASE -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+</style>
+
+<script>
+
+// =====================================================
+// FIREBASE
+// =====================================================
+
+const firebaseConfig = {
+
+    apiKey: "AIzaSyCDxYWfc8VOD5DFLq-JA8C0svyKY3L_-Q8",
+    authDomain: "simbioze-d7472.firebaseapp.com",
+    databaseURL: "https://simbioze-d7472-default-rtdb.firebaseio.com/",
+    projectId: "simbioze-d7472",
+    storageBucket: "simbioze-d7472.firebasestorage.app",
+    messagingSenderId: "131554241238",
+    appId: "1:131554241238:web:7c02e6e03b1d72e0d23777",
+    measurementId: "G-JNE6LP2H9E"
+
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+window.addEventListener("beforeunload", () => {
+
+    db.ref("camera").remove();
+
+});
+
+// =====================================================
+// ORGANIC DISTORTION
+// =====================================================
+
+AFRAME.registerComponent('organic-distortion', {
+
+    init() {
+
+        this.el.addEventListener('model-loaded', () => {
+
+            const mesh = this.el.getObject3D('mesh');
+
+            if (!mesh) return;
+
+            mesh.traverse((node) => {
+
+                // IMPORTANT:
+                // ignore skinned meshes
+
+                if (node.isMesh && !node.isSkinnedMesh) {
+
+                    const geometry = node.geometry;
+                    const position = geometry.attributes.position;
+
+                    const originalPositions = [];
+
+                    for (let i = 0; i < position.count; i++) {
+
+                        originalPositions.push({
+
+                            x: position.getX(i),
+                            y: position.getY(i),
+                            z: position.getZ(i)
+
+                        });
+
+                    }
+
+                    node.userData.originalPositions =
+                        originalPositions;
+
+                }
+
+            });
+
+        });
+
+    },
+
+    tick(time) {
+
+        const mesh = this.el.getObject3D('mesh');
+
+        if (!mesh) return;
+
+        const t = time * 0.001;
+
+        mesh.traverse((node) => {
+
+            // IMPORTANT:
+            // ignore skinned meshes
+
+            if (node.isMesh) {
+
+                const position =
+                    node.geometry.attributes.position;
+
+                const original =
+                    node.userData.originalPositions;
+
+                if (!original) return;
+
+                for (let i = 0; i < position.count; i++) {
+
+                    const ox = original[i].x;
+                    const oy = original[i].y;
+                    const oz = original[i].z;
+
+                    // WAVE 1
+
+                    const wave1 =
+
+                        Math.sin(
+                            t * 2.0 +
+                            ox * 3.0 +
+                            oy * 2.0
+                        ) * 0.06;
+
+                    // WAVE 2
+
+                    const wave2 =
+
+                        Math.cos(
+                            t * 1.5 +
+                            oy * 6.0 +
+                            oz * 2.0
+                        ) * 0.04;
+
+                    // NOISE
+
+                    const noise =
+
+                        Math.sin(
+                            t * 5.0 +
+                            ox * 15.0 +
+                            oy * 12.0
+                        ) * 0.01;
+
+                    // PULSE
+
+                    const pulse =
+
+                        Math.sin(
+                            t * 0.8
+                        ) * 0.03;
+
+                    // FINAL DISTORTION
+
+                    const distortion =
+                        wave1 +
+                        wave2 +
+                        noise +
+                        pulse;
+
+                    // APPLY
+
+                    position.setXYZ(
+
+                        i,
+
+                        ox + distortion * 0.3,
+
+                        oy + distortion * 0.15,
+
+                        oz + distortion
+
+                    );
+
+                }
+
+                position.needsUpdate = true;
+                node.geometry.computeVertexNormals();
+            }
+
+        });
+
+    }
+
+});
+
+
+// =====================================================
+// CAMERA SENDER
+// =====================================================
+
+AFRAME.registerComponent('camera-sync', {
+
+    tick: function (time) {
+    
+        if (!this.lastUpdate) {
+            this.lastUpdate = 0;
+        }
+    
+        if (time - this.lastUpdate < 50) return;
+    
+        this.lastUpdate = time;
+        
+        const pos = this.el.object3D.position;
+        const rot = this.el.object3D.rotation;
+
+        db.ref("camera").set({
+
+            px: pos.x,
+            py: pos.y,
+            pz: pos.z,
+
+            rx: rot.x,
+            ry: rot.y,
+            rz: rot.z
+
+        });
+
+    }
+
+});
+
+
+// =====================================================
+// CAMERA VIEWER
+// =====================================================
+
+AFRAME.registerComponent('camera-viewer', {
+
+    init: function () {
+
+        const el = this.el;
+
+        db.ref("camera").on("value", (snapshot) => {
+
+            const data = snapshot.val();
+
+            if (!data) return;
+
+            el.object3D.position.set(
+                data.px,
+                data.py,
+                data.pz
+            );
+
+            el.object3D.rotation.set(
+                data.rx,
+                data.ry,
+                data.rz
+            );
+
+        });
+
+    }
+
+});
+
+</script>
 
 </head>
 
 <body>
 
-<a-scene background="color: #fff" inspector="" keyboard-shortcuts="" screenshot="" xr-mode-ui="" device-orientation-permission-ui="">
+<a-scene
+
+background="color: #ffffff"
+
+inspector
+keyboard-shortcuts
+screenshot
+xr-mode-ui
+device-orientation-permission-ui>
+
+<!-- =====================================================
+ASSETS
+===================================================== -->
 
 <a-assets>
-<a-asset-item id="sceneModel" src="https://popova-veronika.github.io/DIPLOM_TEST.glb"></a-asset-item>
+
+<a-asset-item
+    id="sceneModel"
+    src="https://popova-veronika.github.io/DIPLOM_TEST.glb">
+</a-asset-item>
+
 </a-assets>
 
-<a-entity camera="" look-controls="" position="0 1.42046 -1.43705" rotation="-6.531718864491387 372.0787921579559 0" data-aframe-inspector-original-camera="" visible=""></a-entity>
 
-<a-entity light="type: ambient; intensity: 0.46; color: #ffffff" visible="" position="0 0.016 0"></a-entity>
-<a-entity light="intensity: 0.94; color: #7b81db" position="0 2 0" visible=""></a-entity>
+<!-- =====================================================
+CAMERA
+===================================================== -->
 
-<a-entity gltf-model="https://popova-veronika.github.io/DIPLOM_TEST.glb" position="1.20087 0 -2.79553" animation-mixer="">
+<a-entity
+    id="mainCamera"
+    camera
+    position="0 1.6 5">
 </a-entity>
 
-<!-- pink -->
-<a-entity light="type: point; color: #767aea; intensity: 2; distance: 6.47; decay: 0.07" position="-14.70362 5.05623 -23.46842" visible=""></a-entity>
-<a-entity light="type: point; color: #4719b3; intensity: 5.39; distance: 5.61; decay: 0.22; groundColor: #99adff" position="-16.30642 3.94849 -11.62215"></a-entity>
-<a-entity light="type: point; color: #569ebd; intensity: 1.63; distance: 6; decay: 0.51" position="-16.52538 0.89144 14.66459" visible=""></a-entity>
-<a-entity light="type: point; color: #ff4fd8; intensity: 2; distance: 5.67; decay: 2" position="-13.6727 2.60813 -0.2093"></a-entity>
 
-<!-- blue -->
-<a-entity light="type: point; color: #4f7dff; intensity: 2; distance: 6; decay: 2" position="2.62043 1.10844 -20.78345"></a-entity>
-<a-entity light="type: point; color: #4f7dff; intensity: 2.68; distance: 7.59; decay: 2; angle: 91.63" position="5.03776 0.02665 17.18237" rotation=""></a-entity>
-<a-entity light="type: point; color: #796d7e; intensity: 5.03; distance: 1.24; decay: -0.64" position="-0.05479 4.37636 -1.47918" visible=""></a-entity>
-<a-entity light="type: point; color: #b04098; intensity: 2; distance: 7.84; decay: 2" position="-13.14731 2.62806 -15.5344"></a-entity><a-entity light="type: point; color: #d84dff; intensity: 2; distance: 7.84; decay: 2" position="8.33503 4.86104 -13.57466"></a-entity><a-entity light="type: point; color: #3fcfb2; intensity: 2; distance: 7.84; decay: 2" position="21.32743 0.96495 -14.12539" rotation=""></a-entity>
-  <a-entity light="type: point; color: #4f7dff; intensity: 2.3; distance: 5.31; decay: 1.83" position="-2.79022 3.30568 10.14914"></a-entity>
+<!-- =====================================================
+LIGHTS
+===================================================== -->
 
-<!-- violet -->
-<a-entity light="type: point; color: #9f4173; intensity: 3.45; distance: 5; decay: 2" position="14.43973 2.64175 -6.06483"></a-entity><a-entity light="type: point; color: #9f414f; intensity: 3.45; distance: 5; decay: 1.53" position="20.12819 1.883 2.3437"></a-entity>
+<a-entity
+light="type: ambient; intensity: 0.46; color: #ffffff"
+position="0 0.016 0">
+</a-entity>
 
-<div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div><div class="a-loader-title" style="display: none;">A-Frame</div></a-scene>
+<a-entity
+light="intensity: 0.94; color: #7b81db"
+position="0 2 0">
+</a-entity>
+
+<a-entity
+light="type: point;
+       color: #796d7e;
+       intensity: 5.03;
+       distance: 1.24;
+       decay: 1"
+position="-0.05479 4.37636 -1.47918">
+</a-entity>
+
+
+<!-- =====================================================
+MODEL
+===================================================== -->
+
+<a-entity
+    gltf-model="#sceneModel"
+    position="1.20087 0 -2.79553"
+    animation-mixer
+    organic-distortion>
+</a-entity>
+
+</a-scene>
+
+
+<!-- =====================================================
+MODE SETUP
+===================================================== -->
+
+<script>
+
+window.addEventListener("DOMContentLoaded", () => {
+
+    const params = new URLSearchParams(window.location.search);
+
+    const mode = params.get("mode");
+
+    const cam = document.querySelector("#mainCamera");
+
+    // ==========================================
+    // VR USER
+    // ==========================================
+
+    if (mode === "vr") {
+
+        cam.setAttribute("look-controls", "");
+        cam.setAttribute("wasd-controls", "");
+        cam.setAttribute("camera-sync", "");
+
+        console.log("VR MODE");
+
+    }
+
+    // ==========================================
+    // VIEWER
+    // ==========================================
+
+    else {
+
+        cam.setAttribute("camera-viewer", "");
+
+        console.log("VIEW MODE");
+
+    }
+
+});
+
+</script>
+
+</body>
+</html>
