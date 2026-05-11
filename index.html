@@ -3,16 +3,13 @@
 
 <head>
 <meta charset="utf-8">
-<title>Atmospheric VR Scene</title>
+<title>VR Camera Sync</title>
 
 <!-- A-FRAME -->
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 
 <!-- EXTRAS -->
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
-
-<!-- BLOOM / POSTPROCESS -->
-<script src="https://unpkg.com/aframe-effects@1.0.0/dist/aframe-effects.min.js"></script>
 
 <!-- FIREBASE -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -23,7 +20,6 @@
 body {
     margin: 0;
     overflow: hidden;
-    background: black;
 }
 
 </style>
@@ -73,6 +69,9 @@ AFRAME.registerComponent('organic-distortion', {
 
             mesh.traverse((node) => {
 
+                // IMPORTANT:
+                // ignore skinned meshes
+
                 if (node.isMesh && !node.isSkinnedMesh) {
 
                     const geometry = node.geometry;
@@ -95,9 +94,6 @@ AFRAME.registerComponent('organic-distortion', {
                     node.userData.originalPositions =
                         originalPositions;
 
-                    node.castShadow = true;
-                    node.receiveShadow = true;
-
                 }
 
             });
@@ -116,6 +112,9 @@ AFRAME.registerComponent('organic-distortion', {
 
         mesh.traverse((node) => {
 
+            // IMPORTANT:
+            // ignore skinned meshes
+
             if (node.isMesh) {
 
                 const position =
@@ -132,13 +131,17 @@ AFRAME.registerComponent('organic-distortion', {
                     const oy = original[i].y;
                     const oz = original[i].z;
 
+                    // WAVE 1
+
                     const wave1 =
 
                         Math.sin(
                             t * 2.0 +
                             ox * 3.0 +
                             oy * 2.0
-                        ) * 0.05;
+                        ) * 0.06;
+
+                    // WAVE 2
 
                     const wave2 =
 
@@ -146,7 +149,9 @@ AFRAME.registerComponent('organic-distortion', {
                             t * 1.5 +
                             oy * 6.0 +
                             oz * 2.0
-                        ) * 0.03;
+                        ) * 0.04;
+
+                    // NOISE
 
                     const noise =
 
@@ -154,13 +159,17 @@ AFRAME.registerComponent('organic-distortion', {
                             t * 5.0 +
                             ox * 15.0 +
                             oy * 12.0
-                        ) * 0.008;
+                        ) * 0.01;
+
+                    // PULSE
 
                     const pulse =
 
                         Math.sin(
                             t * 0.8
-                        ) * 0.02;
+                        ) * 0.03;
+
+                    // FINAL DISTORTION
 
                     const distortion =
                         wave1 +
@@ -168,25 +177,24 @@ AFRAME.registerComponent('organic-distortion', {
                         noise +
                         pulse;
 
+                    // APPLY
+
                     position.setXYZ(
 
                         i,
 
-                        ox + distortion * 0.18,
-                        oy + distortion * 0.08,
-                        oz + distortion * 0.4
+                        ox + distortion * 0.3,
+
+                        oy + distortion * 0.15,
+
+                        oz + distortion
 
                     );
 
                 }
 
                 position.needsUpdate = true;
-
-                // KEEP THIS
-                // lighting needs normals
-
                 node.geometry.computeVertexNormals();
-
             }
 
         });
@@ -195,59 +203,6 @@ AFRAME.registerComponent('organic-distortion', {
 
 });
 
-// =====================================================
-// FLOATING PARTICLES
-// =====================================================
-
-AFRAME.registerComponent('floating-particles', {
-
-    init() {
-
-        const count = 180;
-
-        for (let i = 0; i < count; i++) {
-
-            const particle = document.createElement('a-sphere');
-
-            const x = (Math.random() - 0.5) * 20;
-            const y = Math.random() * 8;
-            const z = (Math.random() - 0.5) * 20;
-
-            const scale =
-                Math.random() * 0.03 + 0.01;
-
-            const opacity =
-                Math.random() * 0.08 + 0.02;
-
-            particle.setAttribute('position', `${x} ${y} ${z}`);
-
-            particle.setAttribute('radius', scale);
-
-            particle.setAttribute('material', `
-                color: #d7dcff;
-                emissive: #d7dcff;
-                emissiveIntensity: 1;
-                transparent: true;
-                opacity: ${opacity};
-                shader: flat;
-            `);
-
-            particle.setAttribute('animation', `
-                property: position;
-                to: ${x} ${y + Math.random() * 1.5} ${z};
-                dir: alternate;
-                dur: ${4000 + Math.random() * 6000};
-                loop: true;
-                easing: easeInOutSine;
-            `);
-
-            this.el.appendChild(particle);
-
-        }
-
-    }
-
-});
 
 // =====================================================
 // CAMERA SENDER
@@ -256,15 +211,15 @@ AFRAME.registerComponent('floating-particles', {
 AFRAME.registerComponent('camera-sync', {
 
     tick: function (time) {
-
+    
         if (!this.lastUpdate) {
             this.lastUpdate = 0;
         }
-
+    
         if (time - this.lastUpdate < 50) return;
-
+    
         this.lastUpdate = time;
-
+        
         const pos = this.el.object3D.position;
         const rot = this.el.object3D.rotation;
 
@@ -283,6 +238,7 @@ AFRAME.registerComponent('camera-sync', {
     }
 
 });
+
 
 // =====================================================
 // CAMERA VIEWER
@@ -326,29 +282,7 @@ AFRAME.registerComponent('camera-viewer', {
 
 <a-scene
 
-background="color: #0b0e14"
-
-fog="
-    type: exponential;
-    color: #0b0e14;
-    density: 0.018"
-
-renderer="
-    colorManagement: true;
-    physicallyCorrectLights: false;
-    toneMapping: ACESFilmic;
-    exposure: 1.15;
-    sortObjects: true"
-
-shadow="type: pcfsoft"
-
-effects="
-    bloom: true;
-    bloomIntensity: 0.65;
-    bloomThreshold: 0.72;
-    bloomRadius: 0.85"
-
-floating-particles
+background="color: #ffffff"
 
 inspector
 keyboard-shortcuts
@@ -369,6 +303,7 @@ ASSETS
 
 </a-assets>
 
+
 <!-- =====================================================
 CAMERA
 ===================================================== -->
@@ -379,69 +314,30 @@ CAMERA
     position="0 1.6 5">
 </a-entity>
 
+
 <!-- =====================================================
 LIGHTS
 ===================================================== -->
 
-<!-- AMBIENT -->
-
 <a-entity
-light="
-    type: ambient;
-    intensity: 0.18;
-    color: #55607d">
+light="type: ambient; intensity: 0.46; color: #ffffff"
+position="0 0.016 0">
 </a-entity>
 
-<!-- MAIN BLUE LIGHT -->
-
 <a-entity
-light="
-    type: directional;
-    color: #bfcfff;
-    intensity: 1.8;
-    castShadow: true;
-    shadowMapWidth: 2048;
-    shadowMapHeight: 2048"
-position="2 6 3">
+light="intensity: 0.94; color: #7b81db"
+position="0 2 0">
 </a-entity>
 
-<!-- PURPLE ATMOSPHERIC LIGHT -->
-
 <a-entity
-light="
-    type: point;
-    color: #9078ff;
-    intensity: 9;
-    distance: 14;
-    decay: 1.4"
-position="-0.05 4.3 -1.4">
+light="type: point;
+       color: #796d7e;
+       intensity: 5.03;
+       distance: 1.24;
+       decay: 1"
+position="-0.05479 4.37636 -1.47918">
 </a-entity>
 
-<!-- WARM CONTRAST LIGHT -->
-
-<a-entity
-light="
-    type: point;
-    color: #ffb38f;
-    intensity: 3;
-    distance: 6;
-    decay: 2"
-position="2 1 -4">
-</a-entity>
-
-<!-- SOFT GLOW SPHERE -->
-
-<a-sphere
-position="-0.05 4.3 -1.4"
-radius="1.8"
-material="
-    color: #9078ff;
-    emissive: #9078ff;
-    emissiveIntensity: 2;
-    transparent: true;
-    opacity: 0.05;
-    shader: flat">
-</a-sphere>
 
 <!-- =====================================================
 MODEL
@@ -455,6 +351,7 @@ MODEL
 </a-entity>
 
 </a-scene>
+
 
 <!-- =====================================================
 MODE SETUP
@@ -470,6 +367,10 @@ window.addEventListener("DOMContentLoaded", () => {
 
     const cam = document.querySelector("#mainCamera");
 
+    // ==========================================
+    // VR USER
+    // ==========================================
+
     if (mode === "vr") {
 
         cam.setAttribute("look-controls", "");
@@ -479,6 +380,10 @@ window.addEventListener("DOMContentLoaded", () => {
         console.log("VR MODE");
 
     }
+
+    // ==========================================
+    // VIEWER
+    // ==========================================
 
     else {
 
