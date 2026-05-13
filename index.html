@@ -364,13 +364,14 @@ renderer="colorManagement: true;
           antialias: true"
 
 env-map
-scene-fog="color: #DA9FF9; density: 0.04"
+scene-fog="color: #572E60; density: 0.04"
 
 inspector
 keyboard-shortcuts
 screenshot
 xr-mode-ui
 device-orientation-permission-ui>
+
 
 <!-- =====================================================
 ASSETS
@@ -393,7 +394,7 @@ CAMERA
 <a-entity
     id="mainCamera"
     camera
-    position="0 1.6 5">
+    position="0 1.6 0">
 </a-entity>
 
 
@@ -403,7 +404,7 @@ LIGHTS
 
 <a-entity
     light="type: ambient;
-           intensity: 0.6;
+           intensity: 0.1;
            color: #ffffff">
 </a-entity>
   
@@ -428,13 +429,48 @@ LIGHTS
             visible="">
 </a-entity>
 
+
+<a-entity 
+light=
+    "type: point; 
+     color: #ffa8f3; 
+     intensity: 15; 
+     distance: 5" 
+          position="-39.19683 -1.31825 10.63872" 
+          rotation="0 200 0" 
+          visible="">
+</a-entity>
+  
 <a-entity
-    light="type: point;
-           color: #796d7e;
-           intensity: 8;
-           distance: 3;
-           decay: 2"
-    position="-0.05479 4.37636 -1.47918">
+light="
+       type: point; 
+       color: #ffa8f3; 
+       intensity: 15; 
+       distance: 12.98" 
+          position="-17.26157 2.38104 0.29181" 
+          rotation="0 200 0" 
+          visible="">
+</a-entity>
+  
+<a-entity 
+light="
+       type: point; 
+       color: #ff7aed; 
+       intensity: 15; 
+       distance: 7.88" 
+          position="-16.84112 2.78303 -8.53978" 
+          rotation="0 200 0" 
+          visible="">
+</a-entity>
+  
+<a-entity 
+light="
+       type: point; 
+       color: #3d2fff; 
+       intensity: 4; 
+       distance: 15; 
+       decay: 1.5" 
+          position="0.943 2.43566 -7.05343">
 </a-entity>
 
 
@@ -475,7 +511,6 @@ window.addEventListener("DOMContentLoaded", () => {
     if (mode === "vr") {
 
         cam.setAttribute("look-controls", "");
-        cam.setAttribute("wasd-controls", "");
         cam.setAttribute("camera-sync", "");
 
         console.log("VR MODE");
