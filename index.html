@@ -17,6 +17,19 @@
 
 <style>
 
+  #startAudioButton {
+    position: fixed;
+    z-index: 9999;
+    top: 20px;
+    left: 20px;
+    padding: 12px 20px;
+    font-size: 16px;
+    background: black;
+    color: white;
+    border: 1px solid white;
+    cursor: pointer;
+}
+    
 body {
     margin: 0;
     overflow: hidden;
@@ -809,6 +822,10 @@ AFRAME.registerComponent('camera-viewer', {
 
 <body>
 
+<button id="startAudioButton">
+    START
+</button>
+    
 <a-scene
 
 background="color: #ffffff"
@@ -842,7 +859,112 @@ ASSETS
     src="https://popova-veronika.github.io/simbioze_opt.glb">
 </a-asset-item>
 
+   <audio id="base" src="https://popova-veronika.github.io/audio/base_sound.mp3" preload="auto"></audio>
+   <audio id="base_back" src="https://popova-veronika.github.io/audio/base_back.mp3" preload="auto"></audio>
+   <audio id="sound_1" src="https://popova-veronika.github.io/audio/sound_1.mp3" preload="auto"></audio>
+  <audio id="sound_2" src="https://popova-veronika.github.io/audio/sound_2.mp3" preload="auto"></audio>
+  <audio id="sound_3" src="https://popova-veronika.github.io/audio/sound_3.mp3" preload="auto"></audio>
+  <audio id="sound_4" src="https://popova-veronika.github.io/audio/sound_4.mp3" preload="auto"></audio>
+
 </a-assets>
+
+  
+<a-entity
+    id="baseSound"
+    position="-3.73875 4.73 16.31205"
+    sound="
+        src: #base;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="backSound"
+    position="-11 4.73 -1"
+    sound="
+        src: #base_back;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="1Sound"
+    position="0.45161 1.95061 1.5248"
+    sound="
+        src: #sound_1;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="2Sound"
+    position="-2.79986 2.42859 -8.7154"
+    sound="
+        src: #sound_2;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="3Sound"
+    position="8.4777 1.55999 2.93707"
+    sound="
+        src: #sound_3;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="4Sound"
+    position="7.68749 2.29946 -5.438"
+    sound="
+        src: #sound_4;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
 
 
 <!-- =====================================================
@@ -975,7 +1097,7 @@ FLOATING PARTICLES
 ===================================================== -->
 
 <a-entity
-    floating-particles="count: 35;
+    floating-particles="count: 100;
                         width: 24;
                         height: 6;
                         depth: 24;
@@ -1045,5 +1167,34 @@ window.addEventListener("DOMContentLoaded", () => {
 
 </script>
 
+   <script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const button = document.querySelector('#startAudioButton');
+
+    button.addEventListener('click', async () => {
+
+        const scene = document.querySelector('a-scene');
+
+        // на всякий случай пробуждаем аудио-контекст браузера
+        if (scene && scene.audioListener && scene.audioListener.context) {
+            if (scene.audioListener.context.state === 'suspended') {
+                await scene.audioListener.context.resume();
+            }
+        }
+
+        // запускаем все звуки в сцене
+        document.querySelectorAll('[sound]').forEach((el) => {
+            if (el.components.sound) {
+                el.components.sound.playSound();
+            }
+        });
+
+        button.style.display = 'none';
+    });
+
+});
+</script>
+    
 </body>
 </html>
