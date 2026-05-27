@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<meta charset="utf-8">
+<title>Simbioze Phone Standalone</title>
+
+<!-- A-FRAME -->
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
+<!-- EXTRAS -->
+<script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+
+<style>
+
+  #startAudioButton {
+    position: fixed;
+    z-index: 9999;
+    top: 20px;
+    left: 20px;
+    padding: 12px 20px;
+    font-size: 16px;
+    background: black;
+    color: white;
+    border: 1px solid white;
+    cursor: pointer;
+}
+    
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+</style>
+
+<script>
+
+
+// =====================================================
+// ENVIRONMENT MAP (reflections + PBR fill)
+// =====================================================
+
+AFRAME.registerComponent('env-map', {
+
+    init() {
+
+        const sceneEl = this.el;
+        const threeScene = sceneEl.object3D;
+
+        const apply = () => {
+
+            const renderer = sceneEl.renderer;
+            const pmrem = new THREE.PMREMGenerator(renderer);
+            pmrem.compileCubemapShader();
+
+            const envScene = new THREE.Scene();
+
+            const boxGeo = new THREE.BoxGeometry(10, 10, 10);
+
+            const materials = [
+                new THREE.MeshBasicMaterial({ color: 0xc4bde0, side: THREE.BackSide }),
+                new THREE.MeshBasicMaterial({ color: 0xb8b0d8, side: THREE.BackSide }),
+                new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.BackSide }),
+                new THREE.MeshBasicMaterial({ color: 0x4a4060, side: THREE.BackSide }),
+                new THREE.MeshBasicMaterial({ color: 0xd0caec, side: THREE.BackSide }),
+                new THREE.MeshBasicMaterial({ color: 0xa89ecc, side: THREE.BackSide }),
+            ];
+
+            const envBox = new THREE.Mesh(boxGeo, materials);
+            envScene.add(envBox);
+
+            const envTex = pmrem.fromScene(envScene, 0.04).texture;
+            threeScene.environment = envTex;
+
+            pmrem.dispose();
+            envScene.clear();
+
+        };
+
+        if (sceneEl.hasLoaded && sceneEl.renderer) {
+            apply();
+        } else {
+            sceneEl.addEventListener('loaded', apply);
+        }
+
+    }
+
+});
+
+
+// =====================================================
+// ENVIRONMENT STRENGTH CONTROL
+// Makes PBR environment fill weaker without disabling env-map
+// =====================================================
+
+AFRAME.registerComponent('env-strength', {
+
+    schema: {
+        value: { type: 'number', default: 0.55 }
+    },
+
+    init() {
+
+        this.el.addEventListener('model-loaded', () => {
+
+            const mesh = this.el.getObject3D('mesh');
+
+            if (!mesh) return;
+
+            mesh.traverse((node) => {
+
+                if (!node.isMesh) return;
+
+                const materials = Array.isArray(node.material)
+                    ? node.material
+                    : [node.material];
+
+                materials.forEach((mat) => {
+
+                    if (!mat) return;
+
+                    if ('envMapIntensity' in mat) {
+
+                        mat.envMapIntensity = this.data.value;
+                        mat.needsUpdate = true;
+
+                    }
+
+                });
+
+            });
+
+        });
+
+    }
+
+});
+
+
+// =====================================================
+// SCENE FOG
+// =====================================================
+
+AFRAME.registerComponent('scene-fog', {
+
+    schema: {
+        color:   { type: 'color',  default: '#060606' },
+        density: { type: 'number', default: 0.05 }
+    },
+
+    init() {
+
+        const apply = () => {
+
+            this.el.object3D.fog = new THREE.FogExp2(
+                this.data.color,
+                this.data.density
+            );
+
+        };
+
+        if (this.el.hasLoaded) {
+            apply();
+        } else {
+            this.el.addEventListener('loaded', apply);
+        }
+
+    }
+
+});
+
+
+// =====================================================
+// FLOATING PARTICLES
+// Light sparse pink / violet dust particles
+// =====================================================
+
+AFRAME.registerComponent('floating-particles', {
+
+    schema: {
+        count:  { type: 'int',    default: 35 },
+        width:  { type: 'number', default: 24 },
+        height: { type: 'number', default: 6 },
+        depth:  { type: 'number', default: 24 },
+        size:   { type: 'number', default: 0.08 },
+        speed:  { type: 'number', default: 0.14 }
+    },
+
+    init() {
+
+        const count = this.data.count;
+
+        const geometry = new THREE.BufferGeometry();
+
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+
+        this.baseX = new Float32Array(count);
+        this.baseY = new Float32Array(count);
+        this.baseZ = new Float32Array(count);
+
+        this.velocity = new Float32Array(count);
+        this.phase = new Float32Array(count);
+
+        const palette = [
+            new THREE.Color('#A05096'),
+            new THREE.Color('#d79bff'),
+            new THREE.Color('#79ACD5'),
+            new THREE.Color('#ff8ae2'),
+            new THREE.Color('#A482E9')
+        ];
+
+        for (let i = 0; i < count; i++) {
+
+            const x = (Math.random() - 0.5) * this.data.width;
+            const y = Math.random() * this.data.height;
+            const z = (Math.random() - 0.5) * this.data.depth;
+
+            this.baseX[i] = x;
+            this.baseY[i] = y;
+            this.baseZ[i] = z;
+
+            this.velocity[i] =
+                0.15 + Math.random() * 0.35;
+
+            this.phase[i] =
+                Math.random() * Math.PI * 2;
+
+            const i3 = i * 3;
+
+            positions[i3] = x;
+            positions[i3 + 1] = y;
+            positions[i3 + 2] = z;
+
+            const color =
+                palette[Math.floor(Math.random() * palette.length)];
+
+            colors[i3] = color.r;
+            colors[i3 + 1] = color.g;
+            colors[i3 + 2] = color.b;
+
+        }
+
+        geometry.setAttribute(
+            'position',
+            new THREE.BufferAttribute(positions, 3)
+        );
+
+        geometry.setAttribute(
+            'color',
+            new THREE.BufferAttribute(colors, 3)
+        );
+
+        const texture = this.createParticleTexture();
+
+        const material = new THREE.PointsMaterial({
+            size: this.data.size,
+            map: texture,
+            transparent: true,
+            opacity: 0.40,
+            depthWrite: false,
+            vertexColors: true,
+            blending: THREE.AdditiveBlending,
+            sizeAttenuation: true
+        });
+
+        this.points = new THREE.Points(geometry, material);
+        this.points.frustumCulled = false;
+
+        this.el.object3D.add(this.points);
+
+        this.positions = geometry.attributes.position.array;
+        this.positionAttribute = geometry.attributes.position;
+
+    },
+
+    tick(time) {
+
+        if (!this.positions) return;
+
+        const t = time * 0.001;
+        const halfHeight = this.data.height * 0.5;
+
+        for (let i = 0; i < this.data.count; i++) {
+
+            const i3 = i * 3;
+
+            let y =
+                this.baseY[i] +
+                ((t * this.data.speed * this.velocity[i]) % this.data.height);
+
+            if (y > this.data.height) {
+                y -= this.data.height;
+            }
+
+            const driftX =
+                Math.sin(t * 0.55 + this.phase[i]) * 0.18;
+
+            const driftZ =
+                Math.cos(t * 0.45 + this.phase[i] * 1.3) * 0.18;
+
+            const flutterY =
+                Math.sin(t * 0.9 + this.phase[i] * 2.1) * 0.05;
+
+            this.positions[i3] =
+                this.baseX[i] + driftX;
+
+            this.positions[i3 + 1] =
+                y - halfHeight + flutterY;
+
+            this.positions[i3 + 2] =
+                this.baseZ[i] + driftZ;
+
+        }
+
+        this.positionAttribute.needsUpdate = true;
+
+    },
+
+    createParticleTexture() {
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+
+        const ctx = canvas.getContext('2d');
+
+        const gradient = ctx.createRadialGradient(
+            32, 32, 0,
+            32, 32, 32
+        );
+
+        gradient.addColorStop(0.0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.25, 'rgba(255,255,255,0.9)');
+        gradient.addColorStop(0.55, 'rgba(255,255,255,0.35)');
+        gradient.addColorStop(1.0, 'rgba(255,255,255,0)');
+
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 64, 64);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
+        return texture;
+
+    }
+
+});
+
+
+// =====================================================
+// ORGANIC DISTORTION
+// =====================================================
+
+AFRAME.registerComponent('organic-distortion', {
+
+    init() {
+
+        this.animatedMeshes = [];
+
+        this.el.addEventListener('model-loaded', () => {
+
+            const mesh = this.el.getObject3D('mesh');
+
+            if (!mesh) return;
+
+            mesh.traverse((node) => {
+
+                if (!node.isMesh) return;
+
+                node.castShadow = true;
+                node.receiveShadow = true;
+
+                node.geometry = node.geometry.clone();
+
+                const geometry = node.geometry;
+                const position = geometry.attributes.position;
+
+                if (!position) return;
+
+                const array = position.array;
+                const vertexCount = position.count;
+
+                const originalPositions =
+                    new Float32Array(array.length);
+
+                originalPositions.set(array);
+
+                const fullName =
+                    getFullObjectName(node).toLowerCase();
+
+                const isEnvironment =
+                    fullName.includes('vide_anim');
+
+                let personalStrength = 1.0;
+                let personalSpeed = 1.0;
+
+                if (
+                    !isEnvironment &&
+                    fullName.includes('doma_1')
+                ) {
+                    personalStrength = 0.35;
+                    personalSpeed = 0.85;
+                }
+
+                const seed =
+                    hashString(fullName || node.uuid) * 1000;
+
+                const variation =
+                    hashString((fullName || node.uuid) + '_variation');
+
+                const v = variation;
+
+                const envAmplitude = 0.7;
+                const envSpeed = 0.30;
+
+                const sculptureAmplitude = 0.2;
+                const sculptureSpeed = 0.45;
+
+                const amplitude = isEnvironment
+                    ? envAmplitude
+                    : sculptureAmplitude *
+                      (0.78 + v * 0.42) *
+                      personalStrength;
+
+                const speed = isEnvironment
+                    ? envSpeed
+                    : sculptureSpeed *
+                      (0.82 + v * 0.38) *
+                      personalSpeed;
+
+                const phase1 =
+                    new Float32Array(vertexCount);
+
+                const phase2 =
+                    new Float32Array(vertexCount);
+
+                const phase3 =
+                    new Float32Array(vertexCount);
+
+                for (let i = 0; i < vertexCount; i++) {
+
+                    const index = i * 3;
+
+                    const ox = originalPositions[index];
+                    const oy = originalPositions[index + 1];
+                    const oz = originalPositions[index + 2];
+
+                    if (isEnvironment) {
+
+                        phase1[i] =
+                            ox * 4.5 +
+                            oy * 2.8 +
+                            seed;
+
+                        phase2[i] =
+                            oz * 3.6 +
+                            oy * 2.4 +
+                            seed * 0.7;
+
+                        phase3[i] =
+                            ox * 4.4 +
+                            oz * 3.9 +
+                            seed * 1.3;
+
+                    } else {
+
+                        phase1[i] =
+                            ox * (4.6 + v * 2.8) +
+                            oy * (4.8 + v * 1.4) +
+                            seed;
+
+                        phase2[i] =
+                            oy * (6.2 + v * 1.5) +
+                            oz * (5.4 + v * 1.2) +
+                            seed * 0.7;
+
+                        phase3[i] =
+                            ox * (7.2 + v * 1.4) +
+                            oz * (6.8 + v * 1.1) +
+                            seed * 1.8;
+
+                    }
+
+                }
+
+                geometry.computeVertexNormals();
+
+                this.animatedMeshes.push({
+
+                    node: node,
+                    geometry: geometry,
+                    position: position,
+                    array: array,
+
+                    original: originalPositions,
+
+                    isEnvironment: isEnvironment,
+
+                    seed: seed,
+                    variation: v,
+
+                    amplitude: amplitude,
+                    speed: speed,
+
+                    phase1: phase1,
+                    phase2: phase2,
+                    phase3: phase3,
+
+                    vertexCount: vertexCount,
+
+                    envDx: 0.08,
+                    envDy: 0.05,
+                    envDz: 0.20,
+
+                    sculptureDx: 0.11 + v * 0.05,
+                    sculptureDy: 0.07 + v * 0.04,
+                    sculptureDz: 0.24 + v * 0.10,
+
+                    envWave2Speed: 0.72,
+                    envWave3Speed: 1.05,
+
+                    sculptureWave2Speed: 0.76 + v * 0.22,
+                    sculptureWave3Speed: 1.25 + v * 0.35,
+                    sculpturePulseSpeed: 1.05 + v * 0.3
+
+                });
+
+                node.frustumCulled = false;
+
+            });
+
+        });
+
+    },
+
+    tick(time) {
+
+        if (!this.animatedMeshes.length) return;
+
+        const t = time * 0.001;
+
+        for (let m = 0; m < this.animatedMeshes.length; m++) {
+
+            const item = this.animatedMeshes[m];
+
+            const array = item.array;
+            const original = item.original;
+
+            const phase1 = item.phase1;
+            const phase2 = item.phase2;
+            const phase3 = item.phase3;
+
+            const amplitude = item.amplitude;
+            const speed = item.speed;
+            const seed = item.seed;
+
+            const vertexCount = item.vertexCount;
+
+            if (item.isEnvironment) {
+
+                // =====================================================
+                // ENVIRONMENT
+                // =====================================================
+
+                const time1 =
+                    t * speed;
+
+                const time2 =
+                    t * speed * item.envWave2Speed;
+
+                const time3 =
+                    t * speed * item.envWave3Speed;
+
+                for (let i = 0; i < vertexCount; i++) {
+
+                    const index = i * 3;
+
+                    const ox = original[index];
+                    const oy = original[index + 1];
+                    const oz = original[index + 2];
+
+                    const localWave1 =
+                        Math.sin(time1 + phase1[i]) *
+                        amplitude;
+
+                    const localWave2 =
+                        Math.cos(time2 + phase2[i]) *
+                        amplitude *
+                        0.65;
+
+                    const localWave3 =
+                        Math.sin(time3 + phase3[i]) *
+                        amplitude *
+                        0.35;
+
+                    const distortion =
+                        localWave1 + localWave2 + localWave3;
+
+                    array[index] =
+                        ox + distortion * item.envDx;
+
+                    array[index + 1] =
+                        oy + distortion * item.envDy;
+
+                    array[index + 2] =
+                        oz + distortion * item.envDz;
+
+                }
+
+            } else {
+
+                // =====================================================
+                // SCULPTURES
+                // =====================================================
+
+                const pulse =
+                    Math.sin(
+                        t * speed * item.sculpturePulseSpeed +
+                        seed * 1.5
+                    ) * 0.22 + 0.78;
+
+                const time1 =
+                    t * speed;
+
+                const time2 =
+                    t * speed * item.sculptureWave2Speed;
+
+                const time3 =
+                    t * speed * item.sculptureWave3Speed;
+
+                for (let i = 0; i < vertexCount; i++) {
+
+                    const index = i * 3;
+
+                    const ox = original[index];
+                    const oy = original[index + 1];
+                    const oz = original[index + 2];
+
+                    const wave1 =
+                        Math.sin(time1 + phase1[i]) *
+                        amplitude *
+                        pulse;
+
+                    const wave2 =
+                        Math.cos(time2 + phase2[i]) *
+                        amplitude *
+                        0.48;
+
+                    const wave3 =
+                        Math.sin(time3 + phase3[i]) *
+                        amplitude *
+                        0.22;
+
+                    const distortion =
+                        wave1 + wave2 + wave3;
+
+                    array[index] =
+                        ox + distortion * item.sculptureDx;
+
+                    array[index + 1] =
+                        oy + distortion * item.sculptureDy;
+
+                    array[index + 2] =
+                        oz + distortion * item.sculptureDz;
+
+                }
+
+            }
+
+            item.position.needsUpdate = true;
+
+        }
+
+    }
+
+});
+
+
+// =====================================================
+// HELPERS
+// =====================================================
+
+function hashString(str) {
+
+    let hash = 0;
+
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+
+    return Math.abs(Math.sin(hash)) % 1;
+
+}
+
+
+function getFullObjectName(object) {
+
+    let names = [];
+    let current = object;
+
+    while (current) {
+
+        if (current.name) {
+            names.push(current.name);
+        }
+
+        current = current.parent;
+
+    }
+
+    return names.join('_');
+
+}
+
+
+
+</script>
+
+</head>
+
+<body>
+
+<button id="startAudioButton">
+    START
+</button>
+    
+<a-scene
+
+background="color: #ffffff"
+
+renderer="colorManagement: true;
+          physicallyCorrectLights: true;
+          toneMapping: ACESFilmic;
+          exposure: 1;
+          shadowMap.enabled: true;
+          shadowMap.type: PCFSoft;
+          antialias: true"
+
+env-map
+scene-fog="color: #7E4AA0; density: 0.045"
+
+inspector
+keyboard-shortcuts
+screenshot
+xr-mode-ui
+device-orientation-permission-ui>
+
+
+<!-- =====================================================
+ASSETS
+===================================================== -->
+
+<a-assets>
+
+<a-asset-item
+    id="sceneModel"
+    src="https://popova-veronika.github.io/simbioze_opt.glb">
+</a-asset-item>
+
+   <audio id="base" src="https://popova-veronika.github.io/audio/base_sound.mp3" preload="auto"></audio>
+   <audio id="base_back" src="https://popova-veronika.github.io/audio/base_back.mp3" preload="auto"></audio>
+   <audio id="sound_1" src="https://popova-veronika.github.io/audio/sound_1.mp3" preload="auto"></audio>
+  <audio id="sound_2" src="https://popova-veronika.github.io/audio/sound_2.mp3" preload="auto"></audio>
+  <audio id="sound_3" src="https://popova-veronika.github.io/audio/sound_3.mp3" preload="auto"></audio>
+  <audio id="sound_4" src="https://popova-veronika.github.io/audio/sound_4.mp3" preload="auto"></audio>
+
+</a-assets>
+
+  
+<a-entity
+    id="baseSound"
+    position="-3.73875 4.73 16.31205"
+    sound="
+        src: #base;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="backSound"
+    position="-11 4.73 -1"
+    sound="
+        src: #base_back;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="1Sound"
+    position="0.45161 1.95061 1.5248"
+    sound="
+        src: #sound_1;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="2Sound"
+    position="-2.79986 2.42859 -8.7154"
+    sound="
+        src: #sound_2;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="3Sound"
+    position="8.4777 1.55999 2.93707"
+    sound="
+        src: #sound_3;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+<a-entity
+    id="4Sound"
+    position="7.68749 2.29946 -5.438"
+    sound="
+        src: #sound_4;
+        autoplay: false;
+        loop: true;
+        volume: 1;
+        positional: true;
+        distanceModel: linear;
+        refDistance: 3;
+        rolloffFactor: 0.15;
+        maxDistance: 70;
+    ">
+</a-entity>
+
+
+
+<!-- =====================================================
+CAMERA
+===================================================== -->
+
+<a-entity
+    id="mainCamera"
+    camera="fov: 65"
+    look-controls="enabled: true; magicWindowTrackingEnabled: true; touchEnabled: true"
+    position="4 1.7 -1.3"
+    rotation="0 95 0">
+</a-entity>
+
+
+<!-- =====================================================
+LIGHTS
+===================================================== -->
+
+<a-entity 
+    id="keyLight" 
+    light="intensity: 6.14; 
+           color: #ffe0ee; 
+           castShadow: true; 
+           shadowMapWidth: 2062.8; 
+           shadowMapHeight: 2018.75; 
+           shadowCameraLeft: -28.66; 
+           shadowCameraRight: 20.6; 
+           shadowCameraTop: 13.55; 
+           shadowCameraBottom: -5.55; 
+           shadowCameraNear: 0.1; 
+           shadowCameraFar: 30.42; 
+           shadowBias: -0.001; 
+           shadowRadius: 2.4; 
+           shadowCameraFov: 90.7" 
+    position="-0.86107 1.72676 -11.43097" 
+    scale="2 2 2" 
+    visible="">
+</a-entity>
+
+
+<a-entity 
+    light="type: point; 
+           color: #ffa8f3; 
+           intensity: 15.05; 
+           distance: 8.82; 
+           penumbra: 1" 
+    position="21.84054 2.42733 4.42539" 
+    rotation="0 200 0" 
+    visible="">
+</a-entity>
+  
+<a-entity
+    light="type: point; 
+           color: #ffa8f3; 
+           intensity: 15; 
+           distance: 12.98" 
+    position="-17.26157 2.38104 0.29181" 
+    rotation="0 200 0" 
+    visible="">
+</a-entity>
+  
+<a-entity 
+    light="type: point; 
+           color: #ff7aed; 
+           intensity: 15; 
+           distance: 7.88" 
+    position="-16.84112 2.78303 -8.53978" 
+    rotation="0 200 0" 
+    visible="">
+</a-entity>
+  
+<a-entity 
+    light="type: point; 
+           color: #3d2fff; 
+           intensity: 4; 
+           distance: 15; 
+           decay: 1.5" 
+    position="0.943 2.43566 -7.05343">
+</a-entity>
+  
+<a-entity 
+    light="type: point; 
+           color: #ff4fc8; 
+           intensity: 6.01; 
+           distance: 5.68; 
+           decay: 0.99" 
+    position="2.76866 1.7 -7.39637" 
+    visible="">
+</a-entity>
+
+
+<!-- =====================================================
+FAKE GLOW PLANES
+===================================================== -->
+  
+<a-plane 
+    position="8.76873 2.85544 -24.74732" 
+    rotation="0 -8.94 0" 
+    width="7" 
+    height="7" 
+    material="shader: flat; 
+              color: #ff29bb; 
+              transparent: true; 
+              opacity: 0.23; 
+              blending: additive; 
+              side: double; 
+              depthWrite: false" 
+    visible="" 
+    geometry="">
+</a-plane>
+
+<a-plane      
+    position="-23.47157 2.85544 -25.042" 
+    rotation="0 15 0" 
+    width="7" 
+    height="7" 
+    material="shader: flat; 
+              color: #ff29bb;
+              transparent: true; 
+              opacity: 0.3; 
+              blending: additive; 
+              side: double; 
+              depthWrite: false" 
+    visible="">
+</a-plane>
+
+
+<!-- =====================================================
+FLOATING PARTICLES
+===================================================== -->
+
+<a-entity
+    floating-particles="count: 150;
+                        width: 24;
+                        height: 6;
+                        depth: 24;
+                        size: 0.08;
+                        speed: 0.14"
+    position="1.2 2 -6">
+</a-entity>
+
+
+<!-- =====================================================
+MODEL
+===================================================== -->
+
+<a-entity
+    gltf-model="#sceneModel"
+    position="1.20087 0 -2.79553"
+    animation-mixer
+    organic-distortion
+    env-strength="value: 0.6"
+    shadow="cast: true; receive: true">
+</a-entity>
+
+
+</a-scene>
+
+
+
+   <script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const button = document.querySelector('#startAudioButton');
+
+    button.addEventListener('click', async () => {
+
+        const scene = document.querySelector('a-scene');
+
+        // на всякий случай пробуждаем аудио-контекст браузера
+        if (scene && scene.audioListener && scene.audioListener.context) {
+            if (scene.audioListener.context.state === 'suspended') {
+                await scene.audioListener.context.resume();
+            }
+        }
+
+        // запускаем все звуки в сцене
+        document.querySelectorAll('[sound]').forEach((el) => {
+            if (el.components.sound) {
+                el.components.sound.playSound();
+            }
+        });
+
+        button.style.display = 'none';
+    });
+
+});
+</script>
+    
+</body>
+</html>
