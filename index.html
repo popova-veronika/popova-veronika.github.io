@@ -17,6 +17,16 @@
 
 <style>
     
+  #qrOverlay {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    width: 140px;
+    z-index: 9999;
+    display: none;
+    pointer-events: none;
+}
+
 body {
     margin: 0;
     overflow: hidden;
@@ -809,6 +819,8 @@ AFRAME.registerComponent('camera-viewer', {
 
 <body>
     
+  <img id="qrOverlay" src="https://popova-veronika.github.io/simbioze_qr_phone.png">
+    
 <a-scene
 
 background="color: #ffffff"
@@ -1120,6 +1132,7 @@ window.addEventListener("DOMContentLoaded", () => {
     const mode = params.get("mode");
 
     const cam = document.querySelector("#mainCamera");
+    const qr = document.querySelector("#qrOverlay");
 
     // ==========================================
     // VR USER
@@ -1129,6 +1142,8 @@ window.addEventListener("DOMContentLoaded", () => {
 
         cam.setAttribute("look-controls", "");
         cam.setAttribute("camera-sync", "");
+
+        if (qr) qr.style.display = "none";
 
         console.log("VR MODE");
 
@@ -1141,6 +1156,8 @@ window.addEventListener("DOMContentLoaded", () => {
     else {
 
         cam.setAttribute("camera-viewer", "");
+
+        if (qr) qr.style.display = "block";
 
         console.log("VIEW MODE");
 
