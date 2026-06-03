@@ -17,6 +17,19 @@
 
 <style>
 
+#startAudioButton {
+    position: fixed;
+    z-index: 9999;
+    top: 20px;
+    left: 20px;
+    padding: 12px 20px;
+    font-size: 16px;
+    background: black;
+    color: white;
+    border: 1px solid white;
+    cursor: pointer;
+}
+
 body {
     margin: 0;
     overflow: hidden;
@@ -808,6 +821,10 @@ AFRAME.registerComponent('camera-viewer', {
 </head>
 
 <body>
+
+<button id="startAudioButton">
+    START
+</button>
     
 <a-scene
 
@@ -1177,5 +1194,35 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 </script>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const button = document.querySelector('#startAudioButton');
+
+    button.addEventListener('click', async () => {
+
+        const scene = document.querySelector('a-scene');
+
+        // на всякий случай пробуждаем аудио-контекст браузера
+        if (scene && scene.audioListener && scene.audioListener.context) {
+            if (scene.audioListener.context.state === 'suspended') {
+                await scene.audioListener.context.resume();
+            }
+        }
+
+        // запускаем все звуки в сцене
+        document.querySelectorAll('[sound]').forEach((el) => {
+            if (el.components.sound) {
+                el.components.sound.playSound();
+            }
+        });
+
+        button.style.display = 'none';
+    });
+
+});
+</script>
+
 </body>
 </html>
