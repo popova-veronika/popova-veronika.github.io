@@ -770,19 +770,21 @@ AFRAME.registerComponent('camera-sync', {
 
         this.lastUpdate = time;
 
-        // IMPORTANT: read the WORLD transform, not the local one.
-        // In VR the head pose lives in the world matrix, NOT in
-        // object3D.position / object3D.rotation.
+        // IMPORTANT: read the WORLD rotation, not the local one.
+        // In VR the real headset direction lives in the world quaternion.
         const obj = this.el.object3D;
-        obj.getWorldPosition(this._pos);
         obj.getWorldQuaternion(this._quat);
 
         db.ref("camera").set({
 
-            px: this._pos.x,
-            py: this._pos.y,
-            pz: this._pos.z,
+            // Keep normal viewers (PC / phone / TV) in the same centered
+            // position that worked before. Do not stream the headset's
+            // physical room offset to ?mode=view.
+            px: 4,
+            py: 1.7,
+            pz: -1.3,
 
+            // But still stream the real VR headset direction.
             qx: this._quat.x,
             qy: this._quat.y,
             qz: this._quat.z,
@@ -1230,12 +1232,16 @@ window.addEventListener("DOMContentLoaded", () => {
 
     else {
 
-        // Viewers replay the VR user's WORLD transform straight onto
-        // the camera, so the rig must be identity (no double offset).
+        // In viewer mode the rig must be identity, otherwise the offset
+        // would be applied twice.
         if (rig) {
             rig.setAttribute("position", "0 0 0");
             rig.setAttribute("rotation", "0 0 0");
         }
+
+        // Safe fallback before Firebase sends data.
+        cam.setAttribute("position", "4 1.7 -1.3");
+        cam.setAttribute("rotation", "0 95 0");
 
         cam.setAttribute("camera-viewer", "");
 
