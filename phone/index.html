@@ -167,7 +167,11 @@ html, body {
     stroke-linejoin: round;
 }
 
-/* Hide automatic A-Frame / WebXR VR buttons */
+
+/* =====================================================
+   HIDE A-FRAME XR / VR BUTTONS
+   ===================================================== */
+
 .a-enter-vr,
 .a-enter-ar,
 .a-enter-vr-button,
@@ -178,9 +182,9 @@ html, body {
     pointer-events: none !important;
 }
 
-/* Fallback fullscreen-like mode for browsers that block native fullscreen */
-html.pseudo-fullscreen,
-body.pseudo-fullscreen {
+/* iOS fallback when real Fullscreen API is blocked by Safari */
+html.ios-fake-fullscreen,
+html.ios-fake-fullscreen body {
     position: fixed;
     inset: 0;
     width: 100%;
@@ -188,7 +192,8 @@ body.pseudo-fullscreen {
     overflow: hidden;
 }
 
-html.pseudo-fullscreen a-scene {
+html.ios-fake-fullscreen a-scene,
+html.ios-fake-fullscreen canvas {
     position: fixed !important;
     inset: 0 !important;
     width: 100vw !important;
@@ -720,7 +725,7 @@ LOADING SCREEN
 
 <!-- =====================================================
 FULLSCREEN BUTTON
-Single tap: enters fullscreen.
+Single tap: enters fullscreen + requests iOS gyro permission.
 ===================================================== -->
 
 <button id="fullscreenBtn" aria-label="Toggle fullscreen">
@@ -751,7 +756,7 @@ renderer="colorManagement: true;
 env-map
 scene-fog="color: #7E4AA0; density: 0.045"
 
-device-orientation-permission-ui="enabled: false"
+device-orientation-permission-ui="enabled: true"
 xr-mode-ui="enabled: false"
 vr-mode-ui="enabled: false"
 keyboard-shortcuts="enterVR: false"
@@ -939,125 +944,74 @@ STARTUP — pixel ratio cap, loading screen, fullscreen button
 
     // ----------------------------------------------------
     // FULLSCREEN BUTTON
-    // Native fullscreen for Android / desktop.
-    // iPhone Safari may block true fullscreen for normal
-    // pages, so there is a visual fallback that still makes
-    // the scene fill the available screen.
+    // Only controls fullscreen. Device-orientation permission
+    // is handled by A-Frame's device-orientation-permission-ui,
+    // which shows its own prompt on iOS Safari when needed.
     // ----------------------------------------------------
 
-    function getFullscreenElement() {
-        return document.fullscreenElement ||
-               document.webkitFullscreenElement ||
-               document.mozFullScreenElement ||
-               document.msFullscreenElement;
+    const isIOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    function isFullscreen() {
+        return !!(
+            document.fullscreenElement ||
+            document.webkitFullscreenElement ||
+            document.mozFullScreenElement ||
+            document.msFullscreenElement
+        );
     }
 
-    function getRequestFullscreen(el) {
-        return el.requestFullscreen ||
-               el.webkitRequestFullscreen ||
-               el.mozRequestFullScreen ||
-               el.msRequestFullscreen;
-    }
+    async function enterFullscreen() {
+        const el = document.documentElement;
+        const req =
+            el.requestFullscreen ||
+            el.webkitRequestFullscreen ||
+            el.mozRequestFullScreen ||
+            el.msRequestFullscreen;
 
-    function getExitFullscreen() {
-        return document.exitFullscreen ||
-               document.webkitExitFullscreen ||
-               document.mozCancelFullScreen ||
-               document.msExitFullscreen;
-    }
-
-    function setPseudoFullscreen(enabled) {
-        document.documentElement.classList.toggle('pseudo-fullscreen', enabled);
-        document.body.classList.toggle('pseudo-fullscreen', enabled);
-
-        if (scene && scene.resize) {
-            setTimeout(() => scene.resize(), 50);
-            setTimeout(() => scene.resize(), 300);
-        }
-    }
-
-    function enterFullscreen() {
-
-        const targets = [
-            scene && scene.canvas,
-            scene,
-            document.documentElement
-        ].filter(Boolean);
-
-        for (let i = 0; i < targets.length; i++) {
-
-            const el = targets[i];
-            const req = getRequestFullscreen(el);
-
-            if (!req) continue;
-
+        if (req) {
             try {
-                const result = req.call(el);
-
-                if (result && typeof result.catch === 'function') {
-                    result.catch(() => {
-                        setPseudoFullscreen(true);
-                    });
-                }
-
+                await req.call(el);
                 return;
-
             } catch (e) {
-                // Try the next possible target.
+                console.log('Fullscreen failed:', e);
             }
-
         }
 
-        setPseudoFullscreen(true);
-
+        // Safari on iPhone can block real fullscreen for normal web pages.
+        // This fallback still stretches the scene to the whole available viewport.
+        if (isIOS) {
+            document.documentElement.classList.add('ios-fake-fullscreen');
+            setTimeout(() => window.scrollTo(0, 1), 60);
+        }
     }
 
-    function exitFullscreen() {
+    async function exitFullscreen() {
+        const exit =
+            document.exitFullscreen ||
+            document.webkitExitFullscreen ||
+            document.mozCancelFullScreen ||
+            document.msExitFullscreen;
 
-        const exit = getExitFullscreen();
-
-        if (getFullscreenElement() && exit) {
+        if (exit) {
             try {
-                const result = exit.call(document);
-
-                if (result && typeof result.catch === 'function') {
-                    result.catch(() => {});
-                }
-
-            } catch (e) {}
+                await exit.call(document);
+                return;
+            } catch (e) {
+                console.log('Exit fullscreen failed:', e);
+            }
         }
 
-        setPseudoFullscreen(false);
-
+        document.documentElement.classList.remove('ios-fake-fullscreen');
     }
 
-    function toggleFullscreen() {
-
-        const pseudo =
-            document.documentElement.classList.contains('pseudo-fullscreen');
-
-        if (getFullscreenElement() || pseudo) {
-            exitFullscreen();
+    btn.addEventListener('click', async () => {
+        if (isFullscreen() || document.documentElement.classList.contains('ios-fake-fullscreen')) {
+            await exitFullscreen();
         } else {
-            enterFullscreen();
+            await enterFullscreen();
         }
-
-    }
-
-    document.addEventListener('fullscreenchange', () => {
-        if (getFullscreenElement()) {
-            setPseudoFullscreen(false);
-        }
-    });
-
-    document.addEventListener('webkitfullscreenchange', () => {
-        if (getFullscreenElement()) {
-            setPseudoFullscreen(false);
-        }
-    });
-
-    btn.addEventListener('click', () => {
-        toggleFullscreen();
     });
 
 })();
