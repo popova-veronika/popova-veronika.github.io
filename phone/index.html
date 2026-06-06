@@ -3,29 +3,177 @@
 
 <head>
 <meta charset="utf-8">
-<title>Simbioze Phone Standalone No Audio</title>
+<meta name="viewport"
+      content="width=device-width,
+               initial-scale=1.0,
+               maximum-scale=1.0,
+               user-scalable=no,
+               viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Simbioze — Mobile</title>
 
 <!-- A-FRAME -->
 <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
 
-<!-- EXTRAS -->
+<!-- EXTRAS (animation-mixer) -->
 <script src="https://cdn.jsdelivr.net/npm/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
-
 
 <style>
 
-body {
+* { box-sizing: border-box; }
+
+html, body {
     margin: 0;
+    padding: 0;
     overflow: hidden;
+    background: #1a0a24;
+    height: 100%;
+    width: 100%;
+    touch-action: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+            user-select: none;
+}
+
+
+/* =====================================================
+   LOADING SCREEN
+   ===================================================== */
+
+#loadingScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background:
+        radial-gradient(
+            circle at 50% 50%,
+            #4a1f5e 0%,
+            #1a0a24 70%
+        );
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.8s ease;
+    pointer-events: all;
+}
+
+#loadingScreen.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.loaderBlob {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background:
+        radial-gradient(
+            circle at 35% 35%,
+            #ffb0e8 0%,
+            #c66ed5 35%,
+            #7a4ab5 70%,
+            #3a1c5a 100%
+        );
+    filter: blur(0.5px);
+    animation:
+        loaderPulse 1.8s ease-in-out infinite,
+        loaderMorph  3.2s ease-in-out infinite;
+    box-shadow:
+        0 0 40px rgba(255, 130, 220, 0.35),
+        0 0 80px rgba(160, 80, 200, 0.25);
+}
+
+@keyframes loaderPulse {
+    0%, 100% { transform: scale(1.0);  opacity: 0.85; }
+    50%      { transform: scale(1.12); opacity: 1.0; }
+}
+
+@keyframes loaderMorph {
+    0%, 100% { border-radius: 50% 50% 50% 50%; }
+    33%      { border-radius: 60% 40% 55% 45%; }
+    66%      { border-radius: 45% 55% 40% 60%; }
+}
+
+.loaderText {
+    margin-top: 28px;
+    color: #f0d8ee;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                 Roboto, sans-serif;
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0.75;
+    animation: loaderTextFade 2.0s ease-in-out infinite;
+}
+
+@keyframes loaderTextFade {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.95; }
+}
+
+
+/* =====================================================
+   FULLSCREEN BUTTON
+   ===================================================== */
+
+#fullscreenBtn {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9000;
+
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: none;
+
+    background: rgba(20, 8, 30, 0.55);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+
+    color: #f0d8ee;
+    cursor: pointer;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    opacity: 0;
+    transition: opacity 0.6s ease, transform 0.15s ease;
+
+    /* respect iPhone safe area */
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    right:  calc(24px + env(safe-area-inset-right));
+}
+
+#fullscreenBtn.visible {
+    opacity: 0.85;
+}
+
+#fullscreenBtn:active {
+    transform: scale(0.92);
+}
+
+#fullscreenBtn svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 </style>
 
+
 <script>
 
-
 // =====================================================
-// ENVIRONMENT MAP (reflections + PBR fill)
+// ENVIRONMENT MAP (reflections + soft PBR fill)
 // =====================================================
 
 AFRAME.registerComponent('env-map', {
@@ -42,7 +190,6 @@ AFRAME.registerComponent('env-map', {
             pmrem.compileCubemapShader();
 
             const envScene = new THREE.Scene();
-
             const boxGeo = new THREE.BoxGeometry(10, 10, 10);
 
             const materials = [
@@ -57,7 +204,9 @@ AFRAME.registerComponent('env-map', {
             const envBox = new THREE.Mesh(boxGeo, materials);
             envScene.add(envBox);
 
-            const envTex = pmrem.fromScene(envScene, 0.04).texture;
+            // Higher sigma = blurrier reflection = cheaper to sample.
+            // On mobile we want maximum blur for minimum cost.
+            const envTex = pmrem.fromScene(envScene, 0.12).texture;
             threeScene.environment = envTex;
 
             pmrem.dispose();
@@ -77,8 +226,7 @@ AFRAME.registerComponent('env-map', {
 
 
 // =====================================================
-// ENVIRONMENT STRENGTH CONTROL
-// Makes PBR environment fill weaker without disabling env-map
+// ENVIRONMENT STRENGTH
 // =====================================================
 
 AFRAME.registerComponent('env-strength', {
@@ -92,7 +240,6 @@ AFRAME.registerComponent('env-strength', {
         this.el.addEventListener('model-loaded', () => {
 
             const mesh = this.el.getObject3D('mesh');
-
             if (!mesh) return;
 
             mesh.traverse((node) => {
@@ -104,16 +251,11 @@ AFRAME.registerComponent('env-strength', {
                     : [node.material];
 
                 materials.forEach((mat) => {
-
                     if (!mat) return;
-
                     if ('envMapIntensity' in mat) {
-
                         mat.envMapIntensity = this.data.value;
                         mat.needsUpdate = true;
-
                     }
-
                 });
 
             });
@@ -132,19 +274,17 @@ AFRAME.registerComponent('env-strength', {
 AFRAME.registerComponent('scene-fog', {
 
     schema: {
-        color:   { type: 'color',  default: '#060606' },
-        density: { type: 'number', default: 0.05 }
+        color:   { type: 'color',  default: '#7E4AA0' },
+        density: { type: 'number', default: 0.045 }
     },
 
     init() {
 
         const apply = () => {
-
             this.el.object3D.fog = new THREE.FogExp2(
                 this.data.color,
                 this.data.density
             );
-
         };
 
         if (this.el.hasLoaded) {
@@ -159,18 +299,17 @@ AFRAME.registerComponent('scene-fog', {
 
 
 // =====================================================
-// FLOATING PARTICLES
-// Light sparse pink / violet dust particles
+// FLOATING PARTICLES (mobile-light count)
 // =====================================================
 
 AFRAME.registerComponent('floating-particles', {
 
     schema: {
-        count:  { type: 'int',    default: 35 },
+        count:  { type: 'int',    default: 50 },
         width:  { type: 'number', default: 24 },
         height: { type: 'number', default: 6 },
         depth:  { type: 'number', default: 24 },
-        size:   { type: 'number', default: 0.08 },
+        size:   { type: 'number', default: 0.10 },
         speed:  { type: 'number', default: 0.14 }
     },
 
@@ -179,14 +318,12 @@ AFRAME.registerComponent('floating-particles', {
         const count = this.data.count;
 
         const geometry = new THREE.BufferGeometry();
-
         const positions = new Float32Array(count * 3);
         const colors = new Float32Array(count * 3);
 
         this.baseX = new Float32Array(count);
         this.baseY = new Float32Array(count);
         this.baseZ = new Float32Array(count);
-
         this.velocity = new Float32Array(count);
         this.phase = new Float32Array(count);
 
@@ -207,37 +344,25 @@ AFRAME.registerComponent('floating-particles', {
             this.baseX[i] = x;
             this.baseY[i] = y;
             this.baseZ[i] = z;
-
-            this.velocity[i] =
-                0.15 + Math.random() * 0.35;
-
-            this.phase[i] =
-                Math.random() * Math.PI * 2;
+            this.velocity[i] = 0.15 + Math.random() * 0.35;
+            this.phase[i] = Math.random() * Math.PI * 2;
 
             const i3 = i * 3;
-
-            positions[i3] = x;
+            positions[i3]     = x;
             positions[i3 + 1] = y;
             positions[i3 + 2] = z;
 
-            const color =
-                palette[Math.floor(Math.random() * palette.length)];
-
-            colors[i3] = color.r;
+            const color = palette[Math.floor(Math.random() * palette.length)];
+            colors[i3]     = color.r;
             colors[i3 + 1] = color.g;
             colors[i3 + 2] = color.b;
 
         }
 
-        geometry.setAttribute(
-            'position',
-            new THREE.BufferAttribute(positions, 3)
-        );
-
-        geometry.setAttribute(
-            'color',
-            new THREE.BufferAttribute(colors, 3)
-        );
+        geometry.setAttribute('position',
+            new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color',
+            new THREE.BufferAttribute(colors, 3));
 
         const texture = this.createParticleTexture();
 
@@ -254,7 +379,6 @@ AFRAME.registerComponent('floating-particles', {
 
         this.points = new THREE.Points(geometry, material);
         this.points.frustumCulled = false;
-
         this.el.object3D.add(this.points);
 
         this.positions = geometry.attributes.position.array;
@@ -273,31 +397,18 @@ AFRAME.registerComponent('floating-particles', {
 
             const i3 = i * 3;
 
-            let y =
-                this.baseY[i] +
+            let y = this.baseY[i] +
                 ((t * this.data.speed * this.velocity[i]) % this.data.height);
 
-            if (y > this.data.height) {
-                y -= this.data.height;
-            }
+            if (y > this.data.height) y -= this.data.height;
 
-            const driftX =
-                Math.sin(t * 0.55 + this.phase[i]) * 0.18;
+            const driftX = Math.sin(t * 0.55 + this.phase[i]) * 0.18;
+            const driftZ = Math.cos(t * 0.45 + this.phase[i] * 1.3) * 0.18;
+            const flutterY = Math.sin(t * 0.9 + this.phase[i] * 2.1) * 0.05;
 
-            const driftZ =
-                Math.cos(t * 0.45 + this.phase[i] * 1.3) * 0.18;
-
-            const flutterY =
-                Math.sin(t * 0.9 + this.phase[i] * 2.1) * 0.05;
-
-            this.positions[i3] =
-                this.baseX[i] + driftX;
-
-            this.positions[i3 + 1] =
-                y - halfHeight + flutterY;
-
-            this.positions[i3 + 2] =
-                this.baseZ[i] + driftZ;
+            this.positions[i3]     = this.baseX[i] + driftX;
+            this.positions[i3 + 1] = y - halfHeight + flutterY;
+            this.positions[i3 + 2] = this.baseZ[i] + driftZ;
 
         }
 
@@ -312,23 +423,17 @@ AFRAME.registerComponent('floating-particles', {
         canvas.height = 64;
 
         const ctx = canvas.getContext('2d');
-
-        const gradient = ctx.createRadialGradient(
-            32, 32, 0,
-            32, 32, 32
-        );
-
-        gradient.addColorStop(0.0, 'rgba(255,255,255,1)');
+        const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+        gradient.addColorStop(0.0,  'rgba(255,255,255,1)');
         gradient.addColorStop(0.25, 'rgba(255,255,255,0.9)');
         gradient.addColorStop(0.55, 'rgba(255,255,255,0.35)');
-        gradient.addColorStop(1.0, 'rgba(255,255,255,0)');
+        gradient.addColorStop(1.0,  'rgba(255,255,255,0)');
 
         ctx.fillStyle = gradient;
         ctx.fillRect(0, 0, 64, 64);
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.needsUpdate = true;
-
         return texture;
 
     }
@@ -337,7 +442,32 @@ AFRAME.registerComponent('floating-particles', {
 
 
 // =====================================================
+// HELPERS
+// =====================================================
+
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(Math.sin(hash)) % 1;
+}
+
+function getFullObjectName(object) {
+    const names = [];
+    let current = object;
+    while (current) {
+        if (current.name) names.push(current.name);
+        current = current.parent;
+    }
+    return names.join('_');
+}
+
+
+// =====================================================
 // ORGANIC DISTORTION
+// (CPU vertex animation, throttled to ~30Hz on mobile)
 // =====================================================
 
 AFRAME.registerComponent('organic-distortion', {
@@ -345,11 +475,11 @@ AFRAME.registerComponent('organic-distortion', {
     init() {
 
         this.animatedMeshes = [];
+        this._lastDistortTime = 0;
 
         this.el.addEventListener('model-loaded', () => {
 
             const mesh = this.el.getObject3D('mesh');
-
             if (!mesh) return;
 
             mesh.traverse((node) => {
@@ -358,160 +488,84 @@ AFRAME.registerComponent('organic-distortion', {
 
                 node.castShadow = true;
                 node.receiveShadow = true;
-
                 node.geometry = node.geometry.clone();
 
                 const geometry = node.geometry;
                 const position = geometry.attributes.position;
-
                 if (!position) return;
 
                 const array = position.array;
                 const vertexCount = position.count;
 
-                const originalPositions =
-                    new Float32Array(array.length);
-
+                const originalPositions = new Float32Array(array.length);
                 originalPositions.set(array);
 
-                const fullName =
-                    getFullObjectName(node).toLowerCase();
-
-                const isEnvironment =
-                    fullName.includes('vide_anim');
+                const fullName = getFullObjectName(node).toLowerCase();
+                const isEnvironment = fullName.includes('vide_anim');
 
                 let personalStrength = 1.0;
                 let personalSpeed = 1.0;
 
-                if (
-                    !isEnvironment &&
-                    fullName.includes('doma_1')
-                ) {
+                if (!isEnvironment && fullName.includes('doma_1')) {
                     personalStrength = 0.35;
                     personalSpeed = 0.85;
                 }
 
-                const seed =
-                    hashString(fullName || node.uuid) * 1000;
-
-                const variation =
-                    hashString((fullName || node.uuid) + '_variation');
-
-                const v = variation;
+                const seed = hashString(fullName || node.uuid) * 1000;
+                const v = hashString((fullName || node.uuid) + '_variation');
 
                 const envAmplitude = 0.7;
                 const envSpeed = 0.30;
-
                 const sculptureAmplitude = 0.2;
                 const sculptureSpeed = 0.45;
 
                 const amplitude = isEnvironment
                     ? envAmplitude
-                    : sculptureAmplitude *
-                      (0.78 + v * 0.42) *
-                      personalStrength;
+                    : sculptureAmplitude * (0.78 + v * 0.42) * personalStrength;
 
                 const speed = isEnvironment
                     ? envSpeed
-                    : sculptureSpeed *
-                      (0.82 + v * 0.38) *
-                      personalSpeed;
+                    : sculptureSpeed * (0.82 + v * 0.38) * personalSpeed;
 
-                const phase1 =
-                    new Float32Array(vertexCount);
-
-                const phase2 =
-                    new Float32Array(vertexCount);
-
-                const phase3 =
-                    new Float32Array(vertexCount);
+                const phase1 = new Float32Array(vertexCount);
+                const phase2 = new Float32Array(vertexCount);
+                const phase3 = new Float32Array(vertexCount);
 
                 for (let i = 0; i < vertexCount; i++) {
-
                     const index = i * 3;
-
                     const ox = originalPositions[index];
                     const oy = originalPositions[index + 1];
                     const oz = originalPositions[index + 2];
 
                     if (isEnvironment) {
-
-                        phase1[i] =
-                            ox * 4.5 +
-                            oy * 2.8 +
-                            seed;
-
-                        phase2[i] =
-                            oz * 3.6 +
-                            oy * 2.4 +
-                            seed * 0.7;
-
-                        phase3[i] =
-                            ox * 4.4 +
-                            oz * 3.9 +
-                            seed * 1.3;
-
+                        phase1[i] = ox * 4.5 + oy * 2.8 + seed;
+                        phase2[i] = oz * 3.6 + oy * 2.4 + seed * 0.7;
+                        phase3[i] = ox * 4.4 + oz * 3.9 + seed * 1.3;
                     } else {
-
-                        phase1[i] =
-                            ox * (4.6 + v * 2.8) +
-                            oy * (4.8 + v * 1.4) +
-                            seed;
-
-                        phase2[i] =
-                            oy * (6.2 + v * 1.5) +
-                            oz * (5.4 + v * 1.2) +
-                            seed * 0.7;
-
-                        phase3[i] =
-                            ox * (7.2 + v * 1.4) +
-                            oz * (6.8 + v * 1.1) +
-                            seed * 1.8;
-
+                        phase1[i] = ox * (4.6 + v * 2.8) + oy * (4.8 + v * 1.4) + seed;
+                        phase2[i] = oy * (6.2 + v * 1.5) + oz * (5.4 + v * 1.2) + seed * 0.7;
+                        phase3[i] = ox * (7.2 + v * 1.4) + oz * (6.8 + v * 1.1) + seed * 1.8;
                     }
-
                 }
 
                 geometry.computeVertexNormals();
 
                 this.animatedMeshes.push({
-
-                    node: node,
-                    geometry: geometry,
-                    position: position,
-                    array: array,
-
+                    node, geometry, position, array,
                     original: originalPositions,
-
-                    isEnvironment: isEnvironment,
-
-                    seed: seed,
-                    variation: v,
-
-                    amplitude: amplitude,
-                    speed: speed,
-
-                    phase1: phase1,
-                    phase2: phase2,
-                    phase3: phase3,
-
-                    vertexCount: vertexCount,
-
-                    envDx: 0.08,
-                    envDy: 0.05,
-                    envDz: 0.20,
-
+                    isEnvironment, seed, variation: v,
+                    amplitude, speed,
+                    phase1, phase2, phase3,
+                    vertexCount,
+                    envDx: 0.08, envDy: 0.05, envDz: 0.20,
                     sculptureDx: 0.11 + v * 0.05,
                     sculptureDy: 0.07 + v * 0.04,
                     sculptureDz: 0.24 + v * 0.10,
-
                     envWave2Speed: 0.72,
                     envWave3Speed: 1.05,
-
                     sculptureWave2Speed: 0.76 + v * 0.22,
                     sculptureWave3Speed: 1.25 + v * 0.35,
                     sculpturePulseSpeed: 1.05 + v * 0.3
-
                 });
 
                 node.frustumCulled = false;
@@ -526,132 +580,72 @@ AFRAME.registerComponent('organic-distortion', {
 
         if (!this.animatedMeshes.length) return;
 
+        // Mobile: throttle distortion to ~30Hz. The motion is slow
+        // enough that this is invisible, but it halves CPU load.
+        if (time - this._lastDistortTime < 33) return;
+        this._lastDistortTime = time;
+
         const t = time * 0.001;
 
         for (let m = 0; m < this.animatedMeshes.length; m++) {
 
             const item = this.animatedMeshes[m];
-
             const array = item.array;
             const original = item.original;
-
             const phase1 = item.phase1;
             const phase2 = item.phase2;
             const phase3 = item.phase3;
-
             const amplitude = item.amplitude;
             const speed = item.speed;
             const seed = item.seed;
-
             const vertexCount = item.vertexCount;
 
             if (item.isEnvironment) {
 
-                // =====================================================
-                // ENVIRONMENT
-                // =====================================================
-
-                const time1 =
-                    t * speed;
-
-                const time2 =
-                    t * speed * item.envWave2Speed;
-
-                const time3 =
-                    t * speed * item.envWave3Speed;
+                const time1 = t * speed;
+                const time2 = t * speed * item.envWave2Speed;
+                const time3 = t * speed * item.envWave3Speed;
 
                 for (let i = 0; i < vertexCount; i++) {
-
                     const index = i * 3;
-
                     const ox = original[index];
                     const oy = original[index + 1];
                     const oz = original[index + 2];
 
-                    const localWave1 =
-                        Math.sin(time1 + phase1[i]) *
-                        amplitude;
+                    const w1 = Math.sin(time1 + phase1[i]) * amplitude;
+                    const w2 = Math.cos(time2 + phase2[i]) * amplitude * 0.65;
+                    const w3 = Math.sin(time3 + phase3[i]) * amplitude * 0.35;
+                    const d = w1 + w2 + w3;
 
-                    const localWave2 =
-                        Math.cos(time2 + phase2[i]) *
-                        amplitude *
-                        0.65;
-
-                    const localWave3 =
-                        Math.sin(time3 + phase3[i]) *
-                        amplitude *
-                        0.35;
-
-                    const distortion =
-                        localWave1 + localWave2 + localWave3;
-
-                    array[index] =
-                        ox + distortion * item.envDx;
-
-                    array[index + 1] =
-                        oy + distortion * item.envDy;
-
-                    array[index + 2] =
-                        oz + distortion * item.envDz;
-
+                    array[index]     = ox + d * item.envDx;
+                    array[index + 1] = oy + d * item.envDy;
+                    array[index + 2] = oz + d * item.envDz;
                 }
 
             } else {
 
-                // =====================================================
-                // SCULPTURES
-                // =====================================================
+                const pulse = Math.sin(
+                    t * speed * item.sculpturePulseSpeed + seed * 1.5
+                ) * 0.22 + 0.78;
 
-                const pulse =
-                    Math.sin(
-                        t * speed * item.sculpturePulseSpeed +
-                        seed * 1.5
-                    ) * 0.22 + 0.78;
-
-                const time1 =
-                    t * speed;
-
-                const time2 =
-                    t * speed * item.sculptureWave2Speed;
-
-                const time3 =
-                    t * speed * item.sculptureWave3Speed;
+                const time1 = t * speed;
+                const time2 = t * speed * item.sculptureWave2Speed;
+                const time3 = t * speed * item.sculptureWave3Speed;
 
                 for (let i = 0; i < vertexCount; i++) {
-
                     const index = i * 3;
-
                     const ox = original[index];
                     const oy = original[index + 1];
                     const oz = original[index + 2];
 
-                    const wave1 =
-                        Math.sin(time1 + phase1[i]) *
-                        amplitude *
-                        pulse;
+                    const w1 = Math.sin(time1 + phase1[i]) * amplitude * pulse;
+                    const w2 = Math.cos(time2 + phase2[i]) * amplitude * 0.48;
+                    const w3 = Math.sin(time3 + phase3[i]) * amplitude * 0.22;
+                    const d = w1 + w2 + w3;
 
-                    const wave2 =
-                        Math.cos(time2 + phase2[i]) *
-                        amplitude *
-                        0.48;
-
-                    const wave3 =
-                        Math.sin(time3 + phase3[i]) *
-                        amplitude *
-                        0.22;
-
-                    const distortion =
-                        wave1 + wave2 + wave3;
-
-                    array[index] =
-                        ox + distortion * item.sculptureDx;
-
-                    array[index + 1] =
-                        oy + distortion * item.sculptureDy;
-
-                    array[index + 2] =
-                        oz + distortion * item.sculptureDz;
-
+                    array[index]     = ox + d * item.sculptureDx;
+                    array[index + 1] = oy + d * item.sculptureDy;
+                    array[index + 2] = oz + d * item.sculptureDz;
                 }
 
             }
@@ -666,43 +660,18 @@ AFRAME.registerComponent('organic-distortion', {
 
 
 // =====================================================
-// HELPERS
+// PAUSE WHEN HIDDEN (saves phone battery)
 // =====================================================
 
-function hashString(str) {
-
-    let hash = 0;
-
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash |= 0;
+document.addEventListener('visibilitychange', () => {
+    const scene = document.querySelector('a-scene');
+    if (!scene) return;
+    if (document.visibilityState === 'hidden') {
+        scene.pause();
+    } else {
+        scene.play();
     }
-
-    return Math.abs(Math.sin(hash)) % 1;
-
-}
-
-
-function getFullObjectName(object) {
-
-    let names = [];
-    let current = object;
-
-    while (current) {
-
-        if (current.name) {
-            names.push(current.name);
-        }
-
-        current = current.parent;
-
-    }
-
-    return names.join('_');
-
-}
-
-
+});
 
 </script>
 
@@ -710,9 +679,36 @@ function getFullObjectName(object) {
 
 <body>
 
+
+<!-- =====================================================
+LOADING SCREEN
+===================================================== -->
+
+<div id="loadingScreen">
+    <div class="loaderBlob"></div>
+    <div class="loaderText">Loading</div>
+</div>
+
+
+<!-- =====================================================
+FULLSCREEN BUTTON
+Single tap: enters fullscreen + requests iOS gyro permission.
+===================================================== -->
+
+<button id="fullscreenBtn" aria-label="Toggle fullscreen">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 9V5h4 M16 5h4v4 M20 15v4h-4 M8 19H4v-4"/>
+    </svg>
+</button>
+
+
+<!-- =====================================================
+SCENE
+===================================================== -->
+
 <a-scene
 
-background="color: #ffffff"
+background="color: #1a0a24"
 
 renderer="colorManagement: true;
           physicallyCorrectLights: true;
@@ -720,182 +716,133 @@ renderer="colorManagement: true;
           exposure: 0.5;
           shadowMap.enabled: true;
           shadowMap.type: PCFSoft;
-          antialias: true"
+          antialias: false;
+          maxCanvasWidth: 1920;
+          maxCanvasHeight: 1920"
 
 env-map
 scene-fog="color: #7E4AA0; density: 0.045"
 
-inspector
-keyboard-shortcuts
-screenshot
-xr-mode-ui
-device-orientation-permission-ui>
+device-orientation-permission-ui="enabled: false"
+vr-mode-ui="enabled: false"
+keyboard-shortcuts="enterVR: false"
+loading-screen="enabled: false">
 
 
-<!-- =====================================================
-ASSETS
-===================================================== -->
+<!-- ASSETS -->
 
-<a-assets>
-
-<a-asset-item
-    id="sceneModel"
-    src="https://popova-veronika.github.io/simbioze_opt.glb">
-</a-asset-item>
-
+<a-assets timeout="20000">
+    <a-asset-item
+        id="sceneModel"
+        src="https://popova-veronika.github.io/simbioze_opt.glb">
+    </a-asset-item>
 </a-assets>
 
 
-
-
-
-
-
-
-<!-- =====================================================
-CAMERA
-===================================================== -->
+<!-- CAMERA
+     Centered to scene (no VR offset). look-controls handles
+     gyroscope on mobile and touch-drag fallback. -->
 
 <a-entity
     id="mainCamera"
     camera="fov: 65"
-    look-controls="enabled: true; magicWindowTrackingEnabled: true; touchEnabled: true"
     position="4 1.7 -1.3"
-    rotation="0 95 0">
+    rotation="0 95 0"
+    look-controls="magicWindowTrackingEnabled: true;
+                   touchEnabled: true;
+                   mouseEnabled: true;
+                   pointerLockEnabled: false">
 </a-entity>
 
 
-<!-- =====================================================
-LIGHTS
-===================================================== -->
+<!-- LIGHTS -->
 
-<a-entity 
-    id="keyLight" 
-    light="intensity: 6.14; 
-           color: #ffe0ee; 
-           castShadow: true; 
-           shadowMapWidth: 2062.8; 
-           shadowMapHeight: 2018.75; 
-           shadowCameraLeft: -28.66; 
-           shadowCameraRight: 20.6; 
-           shadowCameraTop: 13.55; 
-           shadowCameraBottom: -5.55; 
-           shadowCameraNear: 0.1; 
-           shadowCameraFar: 30.42; 
-           shadowBias: -0.001; 
-           shadowRadius: 2.4; 
-           shadowCameraFov: 90.7" 
-    position="-0.86107 1.72676 -11.43097" 
-    scale="2 2 2" 
-    visible="">
-</a-entity>
-
-
-<a-entity 
-    light="type: point; 
-           color: #ffa8f3; 
-           intensity: 15.05; 
-           distance: 8.82; 
-           penumbra: 1" 
-    position="21.84054 2.42733 4.42539" 
-    rotation="0 200 0" 
-    visible="">
-</a-entity>
-  
 <a-entity
-    light="type: point; 
-           color: #ffa8f3; 
-           intensity: 15; 
-           distance: 12.98" 
-    position="-17.26157 2.38104 0.29181" 
-    rotation="0 200 0" 
-    visible="">
+    id="keyLight"
+    light="intensity: 6.14;
+           color: #ffe0ee;
+           castShadow: true;
+           shadowMapWidth: 1024;
+           shadowMapHeight: 1024;
+           shadowCameraLeft: -28.66;
+           shadowCameraRight: 20.6;
+           shadowCameraTop: 13.55;
+           shadowCameraBottom: -5.55;
+           shadowCameraNear: 0.1;
+           shadowCameraFar: 30.42;
+           shadowBias: -0.001;
+           shadowRadius: 2.4;
+           shadowCameraFov: 90.7"
+    position="-0.86107 1.72676 -11.43097"
+    scale="2 2 2">
 </a-entity>
-  
-<a-entity 
-    light="type: point; 
-           color: #ff7aed; 
-           intensity: 15; 
-           distance: 7.88" 
-    position="-16.84112 2.78303 -8.53978" 
-    rotation="0 200 0" 
-    visible="">
+
+<a-entity
+    light="type: point; color: #ffa8f3; intensity: 15.05;
+           distance: 8.82; penumbra: 1"
+    position="21.84054 2.42733 4.42539">
 </a-entity>
-  
-<a-entity 
-    light="type: point; 
-           color: #3d2fff; 
-           intensity: 4; 
-           distance: 15; 
-           decay: 1.5" 
+
+<a-entity
+    light="type: point; color: #ffa8f3; intensity: 15;
+           distance: 12.98"
+    position="-17.26157 2.38104 0.29181">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #ff7aed; intensity: 15;
+           distance: 7.88"
+    position="-16.84112 2.78303 -8.53978">
+</a-entity>
+
+<a-entity
+    light="type: point; color: #3d2fff; intensity: 4;
+           distance: 15; decay: 1.5"
     position="0.943 2.43566 -7.05343">
 </a-entity>
-  
-<a-entity 
-    light="type: point; 
-           color: #ff4fc8; 
-           intensity: 6.01; 
-           distance: 5.68; 
-           decay: 0.99" 
-    position="2.76866 1.7 -7.39637" 
-    visible="">
+
+<a-entity
+    light="type: point; color: #ff4fc8; intensity: 6.01;
+           distance: 5.68; decay: 0.99"
+    position="2.76866 1.7 -7.39637">
 </a-entity>
 
 
-<!-- =====================================================
-FAKE GLOW PLANES
-===================================================== -->
-  
-<a-plane 
-    position="8.76873 2.85544 -24.74732" 
-    rotation="0 -8.94 0" 
-    width="7" 
-    height="7" 
-    material="shader: flat; 
-              color: #ff29bb; 
-              transparent: true; 
-              opacity: 0.23; 
-              blending: additive; 
-              side: double; 
-              depthWrite: false" 
-    visible="" 
-    geometry="">
+<!-- FAKE GLOW PLANES -->
+
+<a-plane
+    position="8.76873 2.85544 -24.74732"
+    rotation="0 -8.94 0"
+    width="7" height="7"
+    material="shader: flat; color: #ff29bb;
+              transparent: true; opacity: 0.23;
+              blending: additive; side: double; depthWrite: false">
 </a-plane>
 
-<a-plane      
-    position="-23.47157 2.85544 -25.042" 
-    rotation="0 15 0" 
-    width="7" 
-    height="7" 
-    material="shader: flat; 
-              color: #ff29bb;
-              transparent: true; 
-              opacity: 0.3; 
-              blending: additive; 
-              side: double; 
-              depthWrite: false" 
-    visible="">
+<a-plane
+    position="-23.47157 2.85544 -25.042"
+    rotation="0 15 0"
+    width="7" height="7"
+    material="shader: flat; color: #ff29bb;
+              transparent: true; opacity: 0.3;
+              blending: additive; side: double; depthWrite: false">
 </a-plane>
 
 
-<!-- =====================================================
-FLOATING PARTICLES
-===================================================== -->
+<!-- FLOATING PARTICLES (mobile-light count) -->
 
 <a-entity
-    floating-particles="count: 150;
+    floating-particles="count: 50;
                         width: 24;
                         height: 6;
                         depth: 24;
-                        size: 0.08;
+                        size: 0.10;
                         speed: 0.14"
     position="1.2 2 -6">
 </a-entity>
 
 
-<!-- =====================================================
-MODEL
-===================================================== -->
+<!-- MODEL -->
 
 <a-entity
     gltf-model="#sceneModel"
@@ -908,5 +855,105 @@ MODEL
 
 
 </a-scene>
+
+
+<!-- =====================================================
+STARTUP — pixel ratio cap, loading screen, fullscreen button
+===================================================== -->
+
+<script>
+
+(function () {
+
+    const scene  = document.querySelector('a-scene');
+    const loader = document.getElementById('loadingScreen');
+    const btn    = document.getElementById('fullscreenBtn');
+
+    // ----------------------------------------------------
+    // Cap pixel ratio.
+    // High-DPI phones (3x) will otherwise render at huge
+    // resolutions and tank the framerate.
+    // 1.5 keeps things crisp without melting the GPU.
+    // ----------------------------------------------------
+
+    scene.addEventListener('loaded', () => {
+        if (scene.renderer) {
+            const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+            scene.renderer.setPixelRatio(dpr);
+        }
+    });
+
+    // ----------------------------------------------------
+    // Hide loading screen once the model is in.
+    // We watch `model-loaded` on the model entity rather than
+    // the scene `loaded` event, because the model is the
+    // slowest asset and that's what the user is waiting for.
+    // ----------------------------------------------------
+
+    const model = document.querySelector('[gltf-model]');
+
+    const reveal = () => {
+        loader.classList.add('hidden');
+        btn.classList.add('visible');
+        setTimeout(() => { loader.style.display = 'none'; }, 900);
+    };
+
+    if (model) {
+        model.addEventListener('model-loaded', reveal);
+    } else {
+        scene.addEventListener('loaded', reveal);
+    }
+
+    // Safety: if something goes wrong, never trap the user
+    // behind the loading screen forever.
+    setTimeout(reveal, 30000);
+
+    // ----------------------------------------------------
+    // FULLSCREEN BUTTON
+    // Also requests iOS device-orientation permission so
+    // gyroscope starts working — iOS Safari needs a user
+    // gesture for this, and tapping fullscreen counts.
+    // ----------------------------------------------------
+
+    async function requestOrientationPermission() {
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                await DeviceOrientationEvent.requestPermission();
+            } catch (e) {
+                /* user denied — touch controls still work */
+            }
+        }
+    }
+
+    function toggleFullscreen() {
+        const doc = document;
+        const fsEl =
+            doc.fullscreenElement ||
+            doc.webkitFullscreenElement;
+
+        if (!fsEl) {
+            const el = doc.documentElement;
+            const req =
+                el.requestFullscreen ||
+                el.webkitRequestFullscreen;
+            if (req) req.call(el);
+        } else {
+            const exit =
+                doc.exitFullscreen ||
+                doc.webkitExitFullscreen;
+            if (exit) exit.call(doc);
+        }
+    }
+
+    btn.addEventListener('click', async () => {
+        await requestOrientationPermission();
+        toggleFullscreen();
+    });
+
+})();
+
+</script>
+
 </body>
 </html>
