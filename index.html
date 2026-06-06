@@ -68,6 +68,109 @@ window.addEventListener("beforeunload", () => {
 
 
 // =====================================================
+// DEVICE DETECTION
+// =====================================================
+//
+// We treat the Quest browser (or any standalone VR headset)
+// as a low-power device and dial down a few things.
+
+const IS_QUEST =
+    /OculusBrowser|Quest|Pico/i.test(navigator.userAgent);
+
+const IS_VR_MODE =
+    new URLSearchParams(window.location.search).get("mode") === "vr";
+
+
+// =====================================================
+// LIFECYCLE / MEMORY HYGIENE
+// =====================================================
+//
+// Long-running VR installations have two problems on Quest:
+//
+//   1. When the headset sleeps, the WebGL context is suspended.
+//      On wake, the browser has to re-upload textures, recompile
+//      shaders, and replay any queued Firebase events. The more
+//      times this happens, the more fragmented memory gets, until
+//      eventually wake-up takes minutes or hangs.
+//
+//   2. requestAnimationFrame keeps firing in the background on
+//      some Quest browser builds, burning CPU for nothing.
+//
+// Strategy:
+//   - Track how long the page has been hidden.
+//   - On resume after a long sleep (>2 min), do a hard reload —
+//     this is the only reliable way to flush WebGL + JS heap on
+//     Quest browser.
+//   - While hidden, pause Firebase reads and stop the renderer.
+
+let _hiddenSince = 0;
+
+const RELOAD_AFTER_HIDDEN_MS = 2 * 60 * 1000;  // 2 minutes
+
+document.addEventListener('visibilitychange', () => {
+
+    const scene = document.querySelector('a-scene');
+
+    if (document.visibilityState === 'hidden') {
+
+        _hiddenSince = Date.now();
+
+        // Stop the render loop so the GPU goes idle.
+        if (scene && scene.renderer) {
+            scene.pause();
+        }
+
+        // Detach Firebase listeners so queued events don't pile up.
+        try { db.goOffline(); } catch (e) { /* ignore */ }
+
+    } else {
+
+        const hiddenFor = Date.now() - _hiddenSince;
+
+        if (_hiddenSince && hiddenFor > RELOAD_AFTER_HIDDEN_MS) {
+
+            // Hard reset — by far the most reliable way to recover.
+            console.log('Long sleep detected, reloading…');
+            location.reload();
+            return;
+
+        }
+
+        try { db.goOnline(); } catch (e) { /* ignore */ }
+
+        if (scene) {
+            scene.play();
+        }
+
+    }
+
+});
+
+
+// =====================================================
+// PERIODIC GPU CACHE CLEANUP
+// =====================================================
+//
+// Every 5 minutes nudge Three.js to drop cached render lists
+// and reset its internal info counters. Cheap insurance against
+// slow leaks on long sessions.
+
+setInterval(() => {
+
+    const scene = document.querySelector('a-scene');
+    if (!scene || !scene.renderer) return;
+
+    try {
+        scene.renderer.renderLists.dispose();
+        scene.renderer.info.reset();
+    } catch (e) {
+        // older three versions don't have these — ignore
+    }
+
+}, 5 * 60 * 1000);
+
+
+// =====================================================
 // ENVIRONMENT MAP (reflections + PBR fill)
 // =====================================================
 
@@ -100,7 +203,10 @@ AFRAME.registerComponent('env-map', {
             const envBox = new THREE.Mesh(boxGeo, materials);
             envScene.add(envBox);
 
-            const envTex = pmrem.fromScene(envScene, 0.04).texture;
+            // Higher sigma = blurrier env map = fewer mip levels needed.
+            // On Quest we use a blurrier (cheaper) reflection.
+            const sigma = IS_QUEST ? 0.1 : 0.04;
+            const envTex = pmrem.fromScene(envScene, sigma).texture;
             threeScene.environment = envTex;
 
             pmrem.dispose();
@@ -569,6 +675,15 @@ AFRAME.registerComponent('organic-distortion', {
 
         if (!this.animatedMeshes.length) return;
 
+        // On Quest, run distortion at ~30Hz instead of every frame.
+        // The motion is slow enough that this is imperceptible,
+        // and it's the heaviest CPU work in the scene.
+        if (IS_QUEST) {
+            if (!this._lastDistortTime) this._lastDistortTime = 0;
+            if (time - this._lastDistortTime < 33) return;
+            this._lastDistortTime = time;
+        }
+
         const t = time * 0.001;
 
         for (let m = 0; m < this.animatedMeshes.length; m++) {
@@ -757,6 +872,7 @@ AFRAME.registerComponent('camera-sync', {
         // reusable temp objects (avoid allocating every tick)
         this._pos = new THREE.Vector3();
         this._quat = new THREE.Quaternion();
+        this._lastQuat = new THREE.Quaternion();
 
     },
 
@@ -766,25 +882,32 @@ AFRAME.registerComponent('camera-sync', {
             this.lastUpdate = 0;
         }
 
-        if (time - this.lastUpdate < 50) return;
+        // 30Hz instead of 20Hz — smoother input for the viewer's
+        // interpolator. Firebase free tier handles this comfortably.
+        if (time - this.lastUpdate < 33) return;
 
         this.lastUpdate = time;
 
-        // IMPORTANT: read the WORLD rotation, not the local one.
-        // In VR the real headset direction lives in the world quaternion.
         const obj = this.el.object3D;
         obj.getWorldQuaternion(this._quat);
 
+        // Skip the network round-trip when the head is still.
+        // Use a tiny threshold so micro-jitter is filtered out.
+        const dq = Math.abs(this._quat.x - this._lastQuat.x)
+                 + Math.abs(this._quat.y - this._lastQuat.y)
+                 + Math.abs(this._quat.z - this._lastQuat.z)
+                 + Math.abs(this._quat.w - this._lastQuat.w);
+
+        if (dq < 0.0005) return;
+
+        this._lastQuat.copy(this._quat);
+
         db.ref("camera").set({
 
-            // Keep normal viewers (PC / phone / TV) in the same centered
-            // position that worked before. Do not stream the headset's
-            // physical room offset to ?mode=view.
             px: 4,
             py: 1.7,
             pz: -1.3,
 
-            // But still stream the real VR headset direction.
             qx: this._quat.x,
             qy: this._quat.y,
             qz: this._quat.z,
@@ -798,50 +921,81 @@ AFRAME.registerComponent('camera-sync', {
 
 
 // =====================================================
-// CAMERA VIEWER
+// CAMERA VIEWER  (with smoothing / interpolation)
 // =====================================================
+//
+// Firebase updates arrive at ~20Hz with network jitter on top.
+// Snapping directly to each update reads as visible lag during
+// head rotation. Instead we store the TARGET pose, and every
+// frame ease the camera toward it. The result is a smooth
+// glide even if updates are late or skipped.
+//
+// `smoothing` is a time-constant in seconds — lower = snappier,
+// higher = smoother but more latency. 0.10 - 0.15 is a sweet spot.
 
 AFRAME.registerComponent('camera-viewer', {
 
+    schema: {
+        smoothing: { type: 'number', default: 0.12 }
+    },
+
     init: function () {
 
-        const el = this.el;
+        this._targetPos  = new THREE.Vector3(4, 1.7, -1.3);
+        this._targetQuat = new THREE.Quaternion();
+        this._hasTarget  = false;
+
+        // reusable temps so we don't allocate per frame
+        this._tmpQuat = new THREE.Quaternion();
 
         db.ref("camera").on("value", (snapshot) => {
 
             const data = snapshot.val();
-
             if (!data) return;
 
-            el.object3D.position.set(
-                data.px,
-                data.py,
-                data.pz
-            );
+            this._targetPos.set(data.px, data.py, data.pz);
 
-            // New format: quaternion (correct head orientation from VR).
             if (data.qw !== undefined) {
 
-                el.object3D.quaternion.set(
-                    data.qx,
-                    data.qy,
-                    data.qz,
-                    data.qw
+                this._targetQuat.set(
+                    data.qx, data.qy, data.qz, data.qw
                 );
+
+            } else if (data.rx !== undefined) {
+
+                // legacy Euler fallback — convert to quat once
+                this._tmpQuat.setFromEuler(
+                    new THREE.Euler(data.rx, data.ry, data.rz, 'YXZ')
+                );
+                this._targetQuat.copy(this._tmpQuat);
 
             }
-            // Fallback: old Euler format, in case stale data is in the DB.
-            else if (data.rx !== undefined) {
 
-                el.object3D.rotation.set(
-                    data.rx,
-                    data.ry,
-                    data.rz
-                );
-
+            // First update: snap, don't interpolate (avoid initial swoop)
+            if (!this._hasTarget) {
+                this.el.object3D.position.copy(this._targetPos);
+                this.el.object3D.quaternion.copy(this._targetQuat);
+                this._hasTarget = true;
             }
 
         });
+
+    },
+
+    tick: function (time, deltaTime) {
+
+        if (!this._hasTarget) return;
+
+        // Frame-rate-independent exponential smoothing.
+        // alpha approaches 1 as deltaTime grows, so the camera
+        // catches up at the same speed regardless of FPS.
+        const dt = Math.min(deltaTime || 16, 100) / 1000;
+        const alpha = 1 - Math.exp(-dt / this.data.smoothing);
+
+        const obj = this.el.object3D;
+
+        obj.position.lerp(this._targetPos, alpha);
+        obj.quaternion.slerp(this._targetQuat, alpha);
 
     }
 
@@ -867,7 +1021,9 @@ renderer="colorManagement: true;
           exposure: 0.5;
           shadowMap.enabled: true;
           shadowMap.type: PCFSoft;
-          antialias: true"
+          antialias: true;
+          foveationLevel: 1;
+          highRefreshRate: true"
 
 env-map
 scene-fog="color: #7E4AA0; density: 0.045"
@@ -1057,8 +1213,8 @@ LIGHTS
     light="intensity: 6.14; 
            color: #ffe0ee; 
            castShadow: true; 
-           shadowMapWidth: 2062.8; 
-           shadowMapHeight: 2018.75; 
+           shadowMapWidth: 2048; 
+           shadowMapHeight: 2048; 
            shadowCameraLeft: -28.66; 
            shadowCameraRight: 20.6; 
            shadowCameraTop: 13.55; 
@@ -1210,13 +1366,56 @@ window.addEventListener("DOMContentLoaded", () => {
     const qr = document.querySelector("#qrPlane");
 
     // ==========================================
+    // QUEST OPTIMIZATIONS
+    // Applied once the scene reports `loaded`.
+    // ==========================================
+
+    const scene = document.querySelector('a-scene');
+
+    scene.addEventListener('loaded', () => {
+
+        if (!IS_QUEST) return;
+
+        // Lower the directional shadow map on Quest:
+        // 1024 is plenty for the scene scale and saves a lot of fillrate.
+        const keyLight = document.querySelector('#keyLight');
+        if (keyLight) {
+            const light = keyLight.components.light &&
+                          keyLight.components.light.light;
+            if (light && light.shadow) {
+                light.shadow.mapSize.width  = 1024;
+                light.shadow.mapSize.height = 1024;
+                if (light.shadow.map) {
+                    light.shadow.map.dispose();
+                    light.shadow.map = null;
+                }
+            }
+        }
+
+        // Halve particles on Quest — they're additive transparency,
+        // which is the most expensive thing on a mobile GPU.
+        const particles = document.querySelector('[floating-particles]');
+        if (particles) {
+            particles.setAttribute(
+                'floating-particles',
+                'count: 60; width: 24; height: 6; depth: 24; ' +
+                'size: 0.10; speed: 0.14'
+            );
+        }
+
+        // Lower pixel ratio on Quest. The headset upscales anyway.
+        if (scene.renderer) {
+            scene.renderer.setPixelRatio(1.0);
+        }
+
+    });
+
+    // ==========================================
     // VR USER
     // ==========================================
 
     if (mode === "vr") {
 
-        // look-controls + the head pose drive the camera;
-        // the rig (#cameraRig) supplies the starting world placement.
         cam.setAttribute("look-controls", "");
         cam.setAttribute("camera-sync", "");
 
@@ -1232,14 +1431,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     else {
 
-        // In viewer mode the rig must be identity, otherwise the offset
-        // would be applied twice.
         if (rig) {
             rig.setAttribute("position", "0 0 0");
             rig.setAttribute("rotation", "0 0 0");
         }
 
-        // Safe fallback before Firebase sends data.
         cam.setAttribute("position", "4 1.7 -1.3");
         cam.setAttribute("rotation", "0 95 0");
 
