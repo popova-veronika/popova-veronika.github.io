@@ -167,6 +167,34 @@ html, body {
     stroke-linejoin: round;
 }
 
+/* Hide automatic A-Frame / WebXR VR buttons */
+.a-enter-vr,
+.a-enter-ar,
+.a-enter-vr-button,
+.a-enter-ar-button,
+.a-enter-xr {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Fallback fullscreen-like mode for browsers that block native fullscreen */
+html.pseudo-fullscreen,
+body.pseudo-fullscreen {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+html.pseudo-fullscreen a-scene {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+}
+
 </style>
 
 
@@ -692,7 +720,7 @@ LOADING SCREEN
 
 <!-- =====================================================
 FULLSCREEN BUTTON
-Single tap: enters fullscreen + requests iOS gyro permission.
+Single tap: enters fullscreen.
 ===================================================== -->
 
 <button id="fullscreenBtn" aria-label="Toggle fullscreen">
@@ -724,6 +752,7 @@ env-map
 scene-fog="color: #7E4AA0; density: 0.045"
 
 device-orientation-permission-ui="enabled: false"
+xr-mode-ui="enabled: false"
 vr-mode-ui="enabled: false"
 keyboard-shortcuts="enterVR: false"
 loading-screen="enabled: false">
@@ -910,44 +939,124 @@ STARTUP — pixel ratio cap, loading screen, fullscreen button
 
     // ----------------------------------------------------
     // FULLSCREEN BUTTON
-    // Also requests iOS device-orientation permission so
-    // gyroscope starts working — iOS Safari needs a user
-    // gesture for this, and tapping fullscreen counts.
+    // Native fullscreen for Android / desktop.
+    // iPhone Safari may block true fullscreen for normal
+    // pages, so there is a visual fallback that still makes
+    // the scene fill the available screen.
     // ----------------------------------------------------
 
-    async function requestOrientationPermission() {
-        if (typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-            try {
-                await DeviceOrientationEvent.requestPermission();
-            } catch (e) {
-                /* user denied — touch controls still work */
-            }
+    function getFullscreenElement() {
+        return document.fullscreenElement ||
+               document.webkitFullscreenElement ||
+               document.mozFullScreenElement ||
+               document.msFullscreenElement;
+    }
+
+    function getRequestFullscreen(el) {
+        return el.requestFullscreen ||
+               el.webkitRequestFullscreen ||
+               el.mozRequestFullScreen ||
+               el.msRequestFullscreen;
+    }
+
+    function getExitFullscreen() {
+        return document.exitFullscreen ||
+               document.webkitExitFullscreen ||
+               document.mozCancelFullScreen ||
+               document.msExitFullscreen;
+    }
+
+    function setPseudoFullscreen(enabled) {
+        document.documentElement.classList.toggle('pseudo-fullscreen', enabled);
+        document.body.classList.toggle('pseudo-fullscreen', enabled);
+
+        if (scene && scene.resize) {
+            setTimeout(() => scene.resize(), 50);
+            setTimeout(() => scene.resize(), 300);
         }
+    }
+
+    function enterFullscreen() {
+
+        const targets = [
+            scene && scene.canvas,
+            scene,
+            document.documentElement
+        ].filter(Boolean);
+
+        for (let i = 0; i < targets.length; i++) {
+
+            const el = targets[i];
+            const req = getRequestFullscreen(el);
+
+            if (!req) continue;
+
+            try {
+                const result = req.call(el);
+
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => {
+                        setPseudoFullscreen(true);
+                    });
+                }
+
+                return;
+
+            } catch (e) {
+                // Try the next possible target.
+            }
+
+        }
+
+        setPseudoFullscreen(true);
+
+    }
+
+    function exitFullscreen() {
+
+        const exit = getExitFullscreen();
+
+        if (getFullscreenElement() && exit) {
+            try {
+                const result = exit.call(document);
+
+                if (result && typeof result.catch === 'function') {
+                    result.catch(() => {});
+                }
+
+            } catch (e) {}
+        }
+
+        setPseudoFullscreen(false);
+
     }
 
     function toggleFullscreen() {
-        const doc = document;
-        const fsEl =
-            doc.fullscreenElement ||
-            doc.webkitFullscreenElement;
 
-        if (!fsEl) {
-            const el = doc.documentElement;
-            const req =
-                el.requestFullscreen ||
-                el.webkitRequestFullscreen;
-            if (req) req.call(el);
+        const pseudo =
+            document.documentElement.classList.contains('pseudo-fullscreen');
+
+        if (getFullscreenElement() || pseudo) {
+            exitFullscreen();
         } else {
-            const exit =
-                doc.exitFullscreen ||
-                doc.webkitExitFullscreen;
-            if (exit) exit.call(doc);
+            enterFullscreen();
         }
+
     }
 
-    btn.addEventListener('click', async () => {
-        await requestOrientationPermission();
+    document.addEventListener('fullscreenchange', () => {
+        if (getFullscreenElement()) {
+            setPseudoFullscreen(false);
+        }
+    });
+
+    document.addEventListener('webkitfullscreenchange', () => {
+        if (getFullscreenElement()) {
+            setPseudoFullscreen(false);
+        }
+    });
+
+    btn.addEventListener('click', () => {
         toggleFullscreen();
     });
 
